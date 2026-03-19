@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">Velocidad en Pantalla</string>
+    <string name="start_service">Iniciar Servicio</string>
+    <string name="stop_service">Detener Servicio</string>
+    <string name="perm_rational">Se requieren permisos de ubicación y superposición para mostrar la velocidad actual sobre otras aplicaciones.</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="automation_group">Automatización</string>
+    <string name="autostart_bt">Inicio automático por Bluetooth</string>
+    <string name="autostart_bt_desc">Iniciar servicio al conectar al Bluetooth del coche</string>
+    <string name="select_bt_device">Seleccionar Dispositivo Bluetooth</string>
+    <string name="no_bt_device_selected">Ningún dispositivo seleccionado</string>
+    <string name="bt_permission_required">Se requieren permisos de Bluetooth para listar y monitorear dispositivos.</string>
+
+    <string name="alerts_group">Alertas y Unidades</string>
+    <string name="audio_warning">Aviso Sonoro</string>
+    <string name="audio_warning_desc">Reproducir sonido al exceder el límite de velocidad</string>
+    <string name="use_mph">Usar MPH</string>
+    <string name="use_mph_desc">Cambiar unidades de km/h a mph</string>
+    <string name="tolerance_title">Tolerancia de Velocidad</string>
+
+    <string name="appearance_group">Apariencia</string>
+    <string name="overlay_size">Tamaño de la Superposición</string>
+    <string name="overlay_alpha">Transparencia de la Superposición</string>
+
+    <string name="system_group">Sistema</string>
+    <string name="dark_mode">Modo Oscuro</string>
+    <string name="dark_mode_auto">Sistema</string>
+    <string name="dark_mode_off">Claro</string>
+    <string name="dark_mode_on">Oscuro</string>
+
+    <string name="language">Idioma</string>
+    <string name="lang_en">English</string>
+    <string name="lang_de">Deutsch</string>
+    <string name="lang_es">Español</string>
+    <string name="lang_fr">Français</string>
+    <string name="lang_it">Italiano</string>
+
+    <!-- Accessibility Descriptions -->
+    <string name="desc_bluetooth_icon">Estado de Bluetooth</string>
+    <string name="desc_notifications_icon">Ajustes de notificaciones</string>
+    <string name="desc_speed_icon">Ajustes de velocidad y unidades</string>
+    <string name="desc_size_icon">Ajustes de tamaño</string>
+    <string name="desc_system_icon">Ajustes del sistema</string>
+
+    <!-- Legal -->
+    <string name="legal_disclaimer_title">Seguridad y Privacidad</string>
+    <string name="legal_disclaimer_text">
+        <b>Aviso Legal:</b>\n
+        El uso de esta aplicación es bajo su propio riesgo. Los límites de velocidad se basan en datos de OpenStreetMap y pueden estar desactualizados o ser incorrectos. Priorice siempre las señales viales físicas. El desarrollador no se hace responsable de infracciones, multas o accidentes.\n\n
+        <b>Privacidad (RGPD):</b>\n
+        Los datos de ubicación se procesan localmente en su dispositivo. Para obtener los límites de velocidad, las coordenadas se envían de forma anónima a la API de Overpass. No se almacenan identificadores personales ni registros de GPS en servidores externos.\n\n
+        <b>Atribución:</b>\n
+        Datos de límites de velocidad © colaboradores de OpenStreetMap.
+    </string>
+    <string name="legal_accept">Aceptar</string>
+    <string name="legal_decline">Rechazar</string>
+
+    <!-- Battery Optimization -->
+    <string name="battery_opt_title">Optimización de Batería</string>
+    <string name="battery_opt_message">Para garantizar un seguimiento preciso de la velocidad en segundo plano, desactive la optimización de batería para esta aplicación.</string>
+    <string name="battery_opt_ok">Ajustes</string>
+    <string name="battery_opt_cancel">Cancelar</string>
+</resources>

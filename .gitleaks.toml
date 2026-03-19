@@ -1,0 +1,39 @@
+# =============================================================================
+# Gitleaks Configuration - Custom Rules
+# Place in project root as .gitleaks.toml
+# =============================================================================
+
+title = "Gitleaks Config - Hendrik Dev Environment"
+
+[extend]
+useDefault = true
+
+# Custom rules for msg/enterprise patterns
+[[rules]]
+id = "msg-internal-token"
+description = "MSG internal token pattern"
+regex = '''(?i)(msg[_-]?token|msg[_-]?api[_-]?key)\s*[:=]\s*['"]?[\w-]{20,}['"]?'''
+tags = ["token", "msg"]
+
+[[rules]]
+id = "azure-connection-string"
+description = "Azure connection string"
+regex = '''(?i)DefaultEndpointsProtocol=https?;AccountName=[\w]+;AccountKey=[\w+/=]+'''
+tags = ["azure", "connection-string"]
+
+[[rules]]
+id = "kubernetes-secret"
+description = "Kubernetes secret in YAML"
+regex = '''(?i)kind:\s*Secret[\s\S]*?data:[\s\S]*?[\w-]+:\s*[A-Za-z0-9+/=]{20,}'''
+tags = ["kubernetes", "secret"]
+
+# Allowlists - false positives
+[allowlist]
+paths = [
+    '''\.secrets\.baseline$''',
+    '''gitleaks\.toml$''',
+    '''\.pre-commit-config\.yaml$''',
+    '''test[s]?/.*''',
+    '''.*_test\.go$''',
+    '''.*Test\.java$''',
+]

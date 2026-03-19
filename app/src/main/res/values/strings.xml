@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">Speed Overlay</string>
+    <string name="start_service">Start Service</string>
+    <string name="stop_service">Stop Service</string>
+    <string name="perm_rational">Location and Overlay permissions are required to show current speed over other apps.</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="automation_group">Automation</string>
+    <string name="autostart_bt">Auto-start on Bluetooth</string>
+    <string name="autostart_bt_desc">Start service when connected to car Bluetooth</string>
+    <string name="select_bt_device">Select Bluetooth Device</string>
+    <string name="no_bt_device_selected">No device selected</string>
+    <string name="bt_permission_required">Bluetooth permissions are required to list and monitor devices.</string>
+
+    <string name="alerts_group">Alerts &amp; Units</string>
+    <string name="audio_warning">Audio Warning</string>
+    <string name="audio_warning_desc">Play sound when exceeding speed limit</string>
+    <string name="use_mph">Use MPH</string>
+    <string name="use_mph_desc">Switch units from km/h to mph</string>
+    <string name="tolerance_title">Speeding Tolerance</string>
+
+    <string name="appearance_group">Appearance</string>
+    <string name="overlay_size">Overlay Size</string>
+    <string name="overlay_alpha">Overlay Transparency</string>
+
+    <string name="system_group">System</string>
+    <string name="dark_mode">Dark Mode</string>
+    <string name="dark_mode_auto">System</string>
+    <string name="dark_mode_off">Light</string>
+    <string name="dark_mode_on">Dark</string>
+
+    <string name="language">Language</string>
+    <string name="lang_en">English</string>
+    <string name="lang_de">Deutsch</string>
+    <string name="lang_es">Español</string>
+    <string name="lang_fr">Français</string>
+    <string name="lang_it">Italiano</string>
+
+    <!-- Accessibility Descriptions -->
+    <string name="desc_bluetooth_icon">Bluetooth status</string>
+    <string name="desc_notifications_icon">Notification settings</string>
+    <string name="desc_speed_icon">Speed and unit settings</string>
+    <string name="desc_size_icon">Size settings</string>
+    <string name="desc_system_icon">System settings</string>
+
+    <!-- Legal -->
+    <string name="legal_disclaimer_title">Safety &amp; Privacy</string>
+    <string name="legal_disclaimer_text">
+        <b>Disclaimer:</b>\n
+        Use of this app is at your own risk. Speed limits are based on OpenStreetMap data and may be outdated or incorrect. Always prioritize physical road signs. The developer is not liable for traffic violations, fines, or accidents.\n\n
+        <b>Privacy (GDPR):</b>\n
+        Location data is processed locally on your device. To fetch speed limits, coordinates are sent anonymously to the Overpass API. No personal identifiers or GPS logs are stored on external servers.\n\n
+        <b>Attribution:</b>\n
+        Speed limit data © OpenStreetMap contributors.
+    </string>
+    <string name="legal_accept">Accept</string>
+    <string name="legal_decline">Decline</string>
+
+    <!-- Battery Optimization -->
+    <string name="battery_opt_title">Battery Optimization</string>
+    <string name="battery_opt_message">To ensure accurate speed tracking in the background, please disable battery optimization for this app.</string>
+    <string name="battery_opt_ok">Settings</string>
+    <string name="battery_opt_cancel">Cancel</string>
+</resources>
