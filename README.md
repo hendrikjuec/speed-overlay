@@ -10,20 +10,20 @@ Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtz
 - **Junction Mode:** Erhöhte Sensitivität an Kreuzungen (< 25 km/h), um Abbiegevorgänge zu antizipieren und das neue Limit sofort zu erfassen.
 - **Offline Resilience:** Lokaler Cache für bis zu 100 Straßen-Segmente überbrückt Funklöcher von bis zu 10 Minuten.
 
+### 📓 Automatisches Logbuch (Neu in v1.2)
+- **Abweichungsetappen:** Automatische Aufzeichnung von Fahrten, bei denen das Tempolimit signifikant überschritten wurde (> 15 km/h).
+- **Detaillierte Analyse:** Erfassung von Start/Endzeitpunkt, GPS-Koordinaten, Maximal- und Durchschnittsgeschwindigkeit pro Etappe.
+- **Smarte Finalisierung:** Intelligente Cooldown-Logik (5s) erkennt das Ende einer Etappe automatisch.
+- **Effiziente Persistenz:** Speichert bis zu 50 Etappen lokal im JSON-Format.
+
 ### ⚡ Performance & Akku
 - **Adaptive Battery Saver:** Drosselt GPS-Intervalle und pausiert Sensoren bei niedrigem Akkustand (< 20%) automatisch (einstellbar).
 - **Sensor-Fusion:** Nutzt Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand (kein GPS-Wandern).
-- **Ultra-Low-Latency GPS:** Erhöhte Abtastrate für verzögerungsfreie Anzeige.
 
 ### 🛡 Sicherheit & Interaktion
 - **Zusatzschilder:** Anzeige von Gefahrenstellen, Schulzonen, unbegrenzten Abschnitten und variablen Schilderbrücken.
 - **Interaktives Overlay:** Ton-Status Anzeige und Mute per Long-Click mit visuellem Feedback (Flash).
 - **Autostart:** Startet automatisch bei Bluetooth-Verbindung oder Stromverbindung (ideal für Head-Units).
-
-## 🛠 Architektur & Technik
-- **Stack:** Kotlin, Coroutines, Retrofit, FusedLocationProvider.
-- **Modularität:** Sauber getrennt in `data`, `logic`, `service` und `ui`.
-- **Anpassbarkeit:** Alle Parameter zentral in `Config.kt` steuerbar.
 
 ## 🚀 Installation & Start
 1. App öffnen und Berechtigungen (Standort, Overlay) erteilen.
@@ -31,7 +31,7 @@ Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtz
 3. Auf "Start Service" tippen.
 
 ## 🧪 Tests ausführen
-Die Core-Logik ist durch Unit-Tests in `SpeedProcessorTest` und `SpeedRepositoryTest` abgesichert:
+Die Core-Logik ist durch Unit-Tests in `SpeedProcessorTest`, `SpeedRepositoryTest` und `AlgorithmusTest` abgesichert:
 ```bash
 ./gradlew test
 ```
