@@ -15,7 +15,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 
 /**
- * Centrally manages permissions for the application.
+ * Centrally manages permissions for the application, handling both legacy (Android 9)
+ * and modern (Android 14+) requirements.
  */
 class PermissionManager(private val activity: Activity) {
 
@@ -23,8 +24,15 @@ class PermissionManager(private val activity: Activity) {
         const val REQ_LOCATION = 100
         const val REQ_OVERLAY = 101
         const val REQ_BT = 102
+        const val REQ_POST_NOTIFICATIONS = 103
     }
 
+    /**
+     * Checks for location permission. Android 10+ requires background location
+     * for foreground services with type 'location', but since we use a
+     * Foreground Service, 'fine_location' is generally sufficient if the
+     * service is visible to the user.
+     */
     fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
             activity,
@@ -52,14 +60,18 @@ class PermissionManager(private val activity: Activity) {
         activity.startActivityForResult(intent, REQ_OVERLAY)
     }
 
+    /**
+     * Handles Bluetooth permissions which changed significantly in Android 12 (API 31).
+     */
     fun hasBluetoothPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(
-                activity,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                ContextCompat.checkSelfPermission(
+                    activity,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+            else -> true // Android 9-11 doesn't require runtime BLUETOOTH_CONNECT
         }
     }
 
@@ -73,7 +85,31 @@ class PermissionManager(private val activity: Activity) {
         }
     }
 
+    /**
+     * Required for Android 13+ (API 33) to show the foreground service notification.
+     */
+    fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQ_POST_NOTIFICATIONS
+            )
+        }
+    }
+
     fun hasAllCriticalPermissions(): Boolean {
-        return hasLocationPermission() && hasOverlayPermission()
+        return hasLocationPermission() && hasOverlayPermission() && hasNotificationPermission()
     }
 }

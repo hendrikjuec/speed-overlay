@@ -12,6 +12,9 @@
     <string name="no_bt_device_selected">No device selected</string>
     <string name="bt_permission_required">Bluetooth permissions are required to list and monitor devices.</string>
 
+    <string name="autostart_power">Autostart bei Strom</string>
+    <string name="autostart_power_desc">Startet App beim Laden</string>
+
     <string name="alerts_group">Alerts &amp; Units</string>
     <string name="audio_warning">Audio Warning</string>
     <string name="audio_warning_desc">Play sound when exceeding speed limit</string>
@@ -36,12 +39,16 @@
     <string name="lang_fr">Français</string>
     <string name="lang_it">Italiano</string>
 
+    <string name="audio_muted_on">Audio Warnung AUS</string>
+    <string name="audio_muted_off">Audio Warnung AN</string>
+
     <!-- Accessibility Descriptions -->
     <string name="desc_bluetooth_icon">Bluetooth status</string>
     <string name="desc_notifications_icon">Notification settings</string>
     <string name="desc_speed_icon">Speed and unit settings</string>
     <string name="desc_size_icon">Size settings</string>
     <string name="desc_system_icon">System settings</string>
+    <string name="desc_power_icon">Power connection status</string>
 
     <!-- Legal -->
     <string name="legal_disclaimer_title">Safety &amp; Privacy</string>

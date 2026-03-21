@@ -33,7 +33,7 @@ import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SettingsManager.OnSettingsChangedListener {
 
     private companion object {
         val LANGUAGES = listOf("en", "de", "es", "fr", "it")
@@ -51,28 +51,40 @@ class MainActivity : AppCompatActivity() {
         else checkBatteryOptimization()
 
         setupUI()
+        settings.addListener(this)
+    }
+
+    override fun onDestroy() {
+        settings.removeListener(this)
+        super.onDestroy()
+    }
+
+    override fun onSettingChanged(key: String) {
+        if (key == SettingsManager.KEY_AUDIO_MUTED_TEMPORARY || key == SettingsManager.KEY_AUDIO_WARNING) {
+            runOnUiThread {
+                updateAudioSwitchState()
+            }
+        }
+    }
+
+    private fun updateAudioSwitchState() {
+        val switchAudio = findViewById<MaterialSwitch>(R.id.switch_audio)
+        // Wenn temporär stummgeschaltet, Schalter visuell auf AUS, sonst nach Haupteinstellung
+        switchAudio?.isChecked = settings.isAudioWarningEnabled && !settings.isAudioMutedTemporary
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Re-setup UI to refresh strings from resources
         setContentView(R.layout.activity_main)
         setupUI()
     }
 
     private fun setupUI() {
-        // Service Controls
         findViewById<Button>(R.id.btn_start).setOnClickListener {
-            if (permissionManager.hasAllCriticalPermissions()) {
-                startSpeedService()
-            } else {
-                if (!permissionManager.hasLocationPermission()) permissionManager.requestLocationPermission()
-                else if (!permissionManager.hasOverlayPermission()) permissionManager.requestOverlayPermission()
-            }
+            handleStartService()
         }
         findViewById<Button>(R.id.btn_stop).setOnClickListener { stopSpeedService() }
 
-        // Automation
         val btnDevice = findViewById<Button>(R.id.btn_select_device)
         findViewById<MaterialSwitch>(R.id.switch_autostart).apply {
             isChecked = settings.isAutostartBtEnabled
@@ -83,27 +95,54 @@ class MainActivity : AppCompatActivity() {
                 if (checked) handleBluetoothRequirement(btnDevice)
             }
         }
+
+        findViewById<MaterialSwitch>(R.id.switch_autostart_power)?.apply {
+            isChecked = settings.isAutostartPowerEnabled
+            setOnCheckedChangeListener { _, checked ->
+                settings.isAutostartPowerEnabled = checked
+            }
+        }
+
         btnDevice.setOnClickListener { showDeviceSelectionDialog(it as Button) }
         updateDeviceButtonText(btnDevice)
 
-        // Alerts & Units
-        bindSwitch(R.id.switch_audio, settings.isAudioWarningEnabled) { settings.isAudioWarningEnabled = it }
+        // Audio Switch initialisieren
+        updateAudioSwitchState()
+        findViewById<MaterialSwitch>(R.id.switch_audio)?.setOnCheckedChangeListener { _, checked ->
+            settings.isAudioWarningEnabled = checked
+            if (checked) settings.isAudioMutedTemporary = false // Reset Mute wenn manuell aktiviert
+        }
+
         bindSwitch(R.id.switch_unit, settings.useMph) { settings.useMph = it }
 
         bindSlider(R.id.slider_tolerance, R.id.tv_tolerance_value, settings.tolerance.toFloat(), "%.0f") { settings.tolerance = it.toInt() }
         bindSlider(R.id.slider_size, R.id.tv_size_value, settings.overlaySize, "%.1fx") { settings.overlaySize = it }
         bindSlider(R.id.slider_alpha, R.id.tv_alpha_value, settings.overlayAlpha, "%d%%", 100f) { settings.overlayAlpha = it }
 
-        // System Settings
         setupDropdowns()
     }
 
+    private fun handleStartService() {
+        when {
+            !permissionManager.hasLocationPermission() -> {
+                permissionManager.requestLocationPermission()
+            }
+            !permissionManager.hasOverlayPermission() -> {
+                permissionManager.requestOverlayPermission()
+            }
+            !permissionManager.hasNotificationPermission() -> {
+                permissionManager.requestNotificationPermission()
+            }
+            else -> {
+                startSpeedService()
+            }
+        }
+    }
+
     private fun setupDropdowns() {
-        // Dark Mode
         val darkOptions = arrayOf(R.string.dark_mode_auto, R.string.dark_mode_off, R.string.dark_mode_on).map { getString(it) }
         setupExposedDropdown(R.id.dropdown_dark_mode, darkOptions, settings.darkMode) { settings.darkMode = it }
 
-        // Language
         val langOptions = arrayOf(R.string.lang_en, R.string.lang_de, R.string.lang_es, R.string.lang_fr, R.string.lang_it).map { getString(it) }
         val currentIdx = LANGUAGES.indexOf(settings.language).coerceAtLeast(0)
         setupExposedDropdown(R.id.dropdown_language, langOptions, currentIdx) { settings.language = LANGUAGES[it] }
@@ -136,7 +175,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindSwitch(id: Int, initial: Boolean, onAction: (Boolean) -> Unit) {
-        findViewById<MaterialSwitch>(id).apply {
+        findViewById<MaterialSwitch>(id)?.apply {
             isChecked = initial
             setOnCheckedChangeListener { _, checked -> onAction(checked) }
         }
@@ -144,7 +183,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindSlider(sliderId: Int, textId: Int, initial: Float, format: String, factor: Float = 1f, onAction: (Float) -> Unit) {
         val tv = findViewById<TextView>(textId)
-        findViewById<Slider>(sliderId).apply {
+        findViewById<Slider>(sliderId)?.apply {
             value = initial
             tv.text = if (format.contains("%d")) String.format(format, (initial * factor).toInt()) else String.format(Locale.getDefault(), format, initial)
             addOnChangeListener { _, v, _ ->
@@ -231,12 +270,12 @@ class MainActivity : AppCompatActivity() {
         val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
         when (requestCode) {
             PermissionManager.REQ_LOCATION -> if (granted) {
-                if (permissionManager.hasAllCriticalPermissions()) startSpeedService()
-                else permissionManager.requestOverlayPermission()
+                handleStartService()
             } else {
                 Toast.makeText(this, R.string.perm_rational, Toast.LENGTH_LONG).show()
             }
             PermissionManager.REQ_BT -> if (granted) updateDeviceButtonText(findViewById(R.id.btn_select_device))
+            PermissionManager.REQ_POST_NOTIFICATIONS -> if (granted) handleStartService()
         }
     }
 }
