@@ -45,8 +45,6 @@ class OverlayManager(
     fun show() {
         if (overlayWrapper != null) return
 
-        // We create a wrapper that will stay at scale 1.0,
-        // but its size will match the scaled inner content.
         overlayWrapper = FrameLayout(context)
 
         innerContentView = LayoutInflater.from(context).inflate(R.layout.overlay_view, overlayWrapper, false)
@@ -83,8 +81,6 @@ class OverlayManager(
 
             updateVisuals()
 
-            // The TouchListener should be on the wrapper or the content.
-            // Putting it on the wrapper ensures the whole window area is draggable.
             overlayWrapper?.setOnTouchListener(OverlayTouchListener(windowManager, overlayWrapper!!, params, onLongClick))
             windowManager.addView(overlayWrapper, params)
         }
@@ -152,24 +148,24 @@ class OverlayManager(
         val wrapper = overlayWrapper ?: return
         val scale = settings.overlaySize
 
-        // 1. Scale the inner view
+        // 1. Apply visual scale transformation
         view.scaleX = scale
         view.scaleY = scale
         view.alpha = settings.overlayAlpha
         tvCurrentSpeed?.setTextColor(settings.overlayTextColor)
 
-        // 2. Measure the original size
+        // 2. Measure natural size at scale 1.0
         view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-        val scaledWidth = (view.measuredWidth * scale).toInt()
-        val scaledHeight = (view.measuredHeight * scale).toInt()
+        val originalWidth = view.measuredWidth
+        val originalHeight = view.measuredHeight
 
-        // 3. Force the wrapper to be exactly the scaled size
-        val wrapperParams = view.layoutParams
-        wrapperParams.width = scaledWidth
-        wrapperParams.height = scaledHeight
-        view.layoutParams = wrapperParams
+        // 3. Calculate scaled dimensions for the Window
+        val scaledWidth = (originalWidth * scale).toInt()
+        val scaledHeight = (originalHeight * scale).toInt()
 
-        // 4. Update the WindowManager window size
+        // 4. Update the WindowManager window size (the wrapper)
+        // We do NOT change innerContentView.layoutParams to scaled size,
+        // because that would trigger a re-layout with more space than needed.
         params.width = scaledWidth
         params.height = scaledHeight
 
