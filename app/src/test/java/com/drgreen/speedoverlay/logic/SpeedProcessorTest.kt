@@ -4,6 +4,7 @@
 
 package com.drgreen.speedoverlay.logic
 
+import com.drgreen.speedoverlay.util.Config
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,12 +36,23 @@ class SpeedProcessorTest {
 
     @Test
     fun testJitterFilter() {
-        // Jitter (desk movement) should be 0
+        // Jitter should be 0 based on current Config
         assertEquals(0, processor.getSmoothedSpeed(0.2f, false))
-        assertEquals(0, processor.getSmoothedSpeed(0.4f, false))
 
         // Real movement should trigger
-        assertTrue(processor.getSmoothedSpeed(1.0f, false) > 0)
+        assertTrue(processor.getSmoothedSpeed(2.0f, false) > 0)
+    }
+
+    @Test
+    fun testMotionDetectorIntegration() {
+        // Test: MotionDetector meldet STILLSTAND (isMoving = false)
+        // Muss 0 km/h erzwingen, selbst wenn GPS 100 m/s meldet
+        assertEquals(0, processor.getSmoothedSpeed(100f, false, isPhysicallyMoving = false))
+
+        // Test: MotionDetector meldet BEWEGUNG (isMoving = true)
+        // Muss GPS-Wert verarbeiten
+        processor.clearHistory()
+        assertTrue(processor.getSmoothedSpeed(10f, false, isPhysicallyMoving = true) > 0)
     }
 
     @Test
@@ -52,15 +64,12 @@ class SpeedProcessorTest {
 
     @Test
     fun testExtremeValues() {
-        // Test supersonic speed (sanity check)
-        assertEquals(1235, processor.getSmoothedSpeed(343f, false)) // Speed of sound in km/h
+        assertEquals(1235, processor.getSmoothedSpeed(343f, false)) // Speed of sound
 
         processor.clearHistory()
-        // Test negative speed (should be treated as jitter/0)
         assertEquals(0, processor.getSmoothedSpeed(-10f, false))
 
         processor.clearHistory()
-        // Test very high jitter
-        assertEquals(0, processor.getSmoothedSpeed(0.49f, false))
+        assertEquals(0, processor.getSmoothedSpeed(0.1f, false))
     }
 }

@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <!-- Schwarzer Hintergrund (wie LED-Anzeige) -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M2,2 L38,2 L38,38 L2,38 Z" />
+    <!-- Weißer Rahmen -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M4,4 L36,4 L36,36 L4,36 Z" />
+    <!-- "VAR" Text-Style Symbole -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,14 L15,26 L18,14 M22,26 L26,14 L30,26 M24,22 L28,22" />
+</vector>

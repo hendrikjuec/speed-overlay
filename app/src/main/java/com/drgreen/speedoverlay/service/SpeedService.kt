@@ -10,27 +10,24 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
-import android.graphics.PixelFormat
 import android.location.Location
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.IBinder
-import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.View
-import android.view.WindowManager
-import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.drgreen.speedoverlay.R
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.data.SpeedRepository
 import com.drgreen.speedoverlay.data.SpeedResult
 import com.drgreen.speedoverlay.logic.SpeedProcessor
-import com.drgreen.speedoverlay.ui.OverlayTouchListener
+import com.drgreen.speedoverlay.ui.OverlayManager
+import com.drgreen.speedoverlay.ui.OverlayState
 import com.drgreen.speedoverlay.util.Config
+import com.drgreen.speedoverlay.util.HardwareHelper
+import com.drgreen.speedoverlay.util.MotionDetector
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -45,18 +42,17 @@ import kotlinx.coroutines.launch
 
 class SpeedService : Service() {
 
-    private lateinit var windowManager: WindowManager
-    private lateinit var overlayView: View
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private lateinit var settingsManager: SettingsManager
+    private lateinit var overlayManager: OverlayManager
+    private lateinit var hardwareHelper: HardwareHelper
+    private lateinit var motionDetector: MotionDetector
+
     private var toneGenerator: ToneGenerator? = null
 
-    private lateinit var tvCurrentSpeed: TextView
-    private lateinit var tvSpeedLimit: TextView
-    private lateinit var tvUnit: TextView
-
     private var currentLimit: Int? = null
+    private var currentAdditionalInfo: List<String> = emptyList()
     private var isCurrentlySpeeding = false
 
     private val speedProcessor = SpeedProcessor()
@@ -69,8 +65,6 @@ class SpeedService : Service() {
     private companion object {
         const val CHANNEL_ID = "SpeedServiceChannel"
         const val STOP_ACTION = "STOP_SERVICE"
-        const val INITIAL_X = 100
-        const val INITIAL_Y = 100
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -86,10 +80,19 @@ class SpeedService : Service() {
     override fun onCreate() {
         super.onCreate()
         settingsManager = SettingsManager(this)
+        hardwareHelper = HardwareHelper(this)
+        motionDetector = MotionDetector(this)
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+
+        overlayManager = OverlayManager(this, settingsManager) {
+            toggleAudioMute()
+        }
+
         createNotificationChannel()
         startForeground(1, createNotification())
-        initOverlay()
+
+        overlayManager.show()
+        motionDetector.start()
         initLocationUpdates()
     }
 
@@ -110,57 +113,20 @@ class SpeedService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Speed Overlay Active")
+            .setContentTitle(getString(R.string.app_name))
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .build()
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun initOverlay() {
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_view, null)
-        tvCurrentSpeed = overlayView.findViewById(R.id.current_speed_text)
-        tvSpeedLimit = overlayView.findViewById(R.id.speed_limit_text)
-        tvUnit = overlayView.findViewById(R.id.unit_text)
+    private fun toggleAudioMute() {
+        settingsManager.isAudioMutedTemporary = !settingsManager.isAudioMutedTemporary
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = INITIAL_X
-            y = INITIAL_Y
-        }
+        val msgRes = if (settingsManager.isAudioMutedTemporary) R.string.audio_muted_on else R.string.audio_muted_off
+        Toast.makeText(this, getString(msgRes), Toast.LENGTH_SHORT).show()
 
-        updateOverlayVisuals(params)
-
-        overlayView.setOnTouchListener(OverlayTouchListener(windowManager, overlayView, params))
-        windowManager.addView(overlayView, params)
-    }
-
-    private fun updateOverlayVisuals(params: WindowManager.LayoutParams? = null) {
-        val scale = settingsManager.overlaySize
-        overlayView.scaleX = scale
-        overlayView.scaleY = scale
-
-        if (params != null || overlayView.layoutParams is WindowManager.LayoutParams) {
-            val p = params ?: overlayView.layoutParams as WindowManager.LayoutParams
-            overlayView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-            p.width = (overlayView.measuredWidth * scale).toInt()
-            p.height = (overlayView.measuredHeight * scale).toInt()
-            if (params == null) windowManager.updateViewLayout(overlayView, p)
-        }
-
-        overlayView.alpha = settingsManager.overlayAlpha
-        tvCurrentSpeed.setTextColor(settingsManager.overlayTextColor)
+        overlayManager.flash()
+        hardwareHelper.vibrate()
     }
 
     @SuppressLint("MissingPermission")
@@ -180,27 +146,29 @@ class SpeedService : Service() {
 
     private fun updateSpeed(location: Location) {
         val useMph = settingsManager.useMph
-        val speed = speedProcessor.getSmoothedSpeed(location.speed, useMph)
-
-        tvCurrentSpeed.text = speed.toString()
-        tvUnit.text = if (useMph) "mph" else "km/h"
-
-        updateOverlayVisuals()
+        val speed = speedProcessor.getSmoothedSpeed(location.speed, useMph, motionDetector.isMoving)
 
         val speeding = speedProcessor.isSpeeding(speed, currentLimit, settingsManager.tolerance)
-        if (speeding) {
-            overlayView.setBackgroundResource(R.drawable.overlay_bg_warning)
-            if (!isCurrentlySpeeding && settingsManager.isAudioWarningEnabled) {
+
+        overlayManager.updateState(OverlayState(
+            currentSpeed = speed,
+            speedLimit = currentLimit,
+            unit = if (useMph) "mph" else "km/h",
+            isSpeeding = speeding,
+            showHazard = currentAdditionalInfo.contains("Gefahr") || currentAdditionalInfo.contains("Schule"),
+            showCamera = currentAdditionalInfo.contains("Blitzer"),
+            isAudioMuted = settingsManager.isAudioMutedTemporary
+        ))
+
+        if (speeding && currentLimit != null && currentLimit!! > 0) {
+            if (!isCurrentlySpeeding && settingsManager.isAudioWarningEnabled && !settingsManager.isAudioMutedTemporary) {
                 toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
             }
-        } else {
-            overlayView.setBackgroundResource(R.drawable.overlay_bg)
         }
         isCurrentlySpeeding = speeding
 
-        // API Call Logic
         val speedKmh = if (useMph) speed * 1.609f else speed.toFloat()
-        val dynamicInterval = if (speedKmh > 80) 10000L else 5000L
+        val dynamicInterval = if (speedKmh > 80) 8000L else 4000L
         val dist = lastApiLocation?.distanceTo(location) ?: Float.MAX_VALUE
         val time = System.currentTimeMillis()
 
@@ -213,15 +181,14 @@ class SpeedService : Service() {
 
     private fun fetchSpeedLimit(lat: Double, lon: Double, heading: Float) {
         serviceScope.launch {
-            // Passing heading for direction-aware matching
-            when (val result = speedRepository.fetchSpeedLimit(lat, lon, heading)) {
+            when (val result = speedRepository.fetchSpeedLimit(lat, lon, heading, settingsManager.showSpeedCameras)) {
                 is SpeedResult.Success -> {
                     currentLimit = result.data
-                    tvSpeedLimit.text = result.data?.toString() ?: "--"
-                    tvSpeedLimit.alpha = 1.0f
+                    currentAdditionalInfo = result.additionalInfo
                 }
                 is SpeedResult.Error -> {
-                    tvSpeedLimit.alpha = 0.5f
+                    currentLimit = null
+                    currentAdditionalInfo = emptyList()
                 }
                 is SpeedResult.Loading -> { }
             }
@@ -232,7 +199,8 @@ class SpeedService : Service() {
         super.onDestroy()
         serviceScope.cancel()
         toneGenerator?.release()
-        if (::overlayView.isInitialized) windowManager.removeView(overlayView)
+        overlayManager.hide()
+        motionDetector.stop()
         if (::fusedLocationClient.isInitialized) fusedLocationClient.removeLocationUpdates(locationCallback)
         speedProcessor.clearHistory()
     }

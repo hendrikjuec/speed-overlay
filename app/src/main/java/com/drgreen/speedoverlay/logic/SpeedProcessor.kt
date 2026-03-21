@@ -22,14 +22,21 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
 
     /**
      * Smoothes raw GPS speed and converts it to the target unit.
+     * Takes an external motion trigger (e.g. from sensors) into account.
      */
-    fun getSmoothedSpeed(rawSpeedMs: Float, useMph: Boolean): Int {
-        val safeRawSpeed = if (rawSpeedMs < 0f) 0f else rawSpeedMs
+    fun getSmoothedSpeed(rawSpeedMs: Float, useMph: Boolean, isPhysicallyMoving: Boolean = true): Int {
+        if (!isPhysicallyMoving) {
+            speedHistory.clear()
+            return 0
+        }
 
-        // Jitter filter
-        val filteredSpeed = if (safeRawSpeed < Config.JITTER_THRESHOLD_MS) 0f else safeRawSpeed
+        val safeRawSpeed = if (rawSpeedMs < Config.JITTER_THRESHOLD_MS) 0f else rawSpeedMs
 
-        updateHistory(filteredSpeed)
+        updateHistory(safeRawSpeed)
+
+        if (speedHistory.all { it == 0f }) {
+            return 0
+        }
 
         val avgSpeedMs = if (speedHistory.isEmpty()) 0f else speedHistory.average().toFloat()
 
@@ -41,8 +48,13 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
         return if (result < 0) 0 else result
     }
 
+    /**
+     * Checks if current speed exceeds limit plus tolerance.
+     * Returns false if limit is 0 (unlimited) or -1 (variable).
+     */
     fun isSpeeding(currentSpeed: Int, limit: Int?, tolerance: Int): Boolean {
-        return limit?.let { currentSpeed > it + tolerance } ?: false
+        if (limit == null || limit <= 0) return false
+        return currentSpeed > limit + tolerance
     }
 
     fun clearHistory() {
