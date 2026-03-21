@@ -33,13 +33,18 @@ object Config {
     const val LOW_SPEED_THRESHOLD_KMH = 30.0f
 
     // Battery Optimization
-    const val BATTERY_LOW_THRESHOLD = 20 // Prozent
+    const val BATTERY_LOW_THRESHOLD = 20
     const val BATTERY_SAVER_GPS_INTERVAL_MS = 1000L
-    const val BATTERY_SAVER_API_DIST_MULT = 2.0f // Multiplikator für Distanz-Trigger
+    const val BATTERY_SAVER_API_DIST_MULT = 2.0f
 
     // Dynamic Update Triggers
     const val SPEED_CHANGE_TRIGGER_KMH = 15.0f
     const val JUNCTION_SPEED_THRESHOLD_KMH = 25.0f
+
+    // --- 📓 Logbook Configuration ---
+    const val LOG_SPEED_THRESHOLD_KMH = 15.0f // Abweichung ab der geloggt wird
+    const val LOG_COOLDOWN_SECONDS = 5 // Zeit in Sekunden, die das Speeding unterbrochen sein muss, um die Etappe zu beenden
+    const val MAX_LOG_ENTRIES = 50 // Maximale Anzahl an gespeicherten Etappen
 
     // Service & UI
     const val LOCATION_UPDATE_INTERVAL_MS = 400L

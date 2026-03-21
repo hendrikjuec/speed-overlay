@@ -23,6 +23,8 @@ import android.os.IBinder
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.drgreen.speedoverlay.R
+import com.drgreen.speedoverlay.data.LogEntry
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.data.SpeedRepository
 import com.drgreen.speedoverlay.data.SpeedResult
@@ -43,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.util.UUID
 import kotlin.math.abs
 
 class SpeedService : Service() {
@@ -53,6 +56,7 @@ class SpeedService : Service() {
     private lateinit var overlayManager: OverlayManager
     private lateinit var hardwareHelper: HardwareHelper
     private lateinit var motionDetector: MotionDetector
+    private lateinit var logManager: LogManager
 
     private var toneGenerator: ToneGenerator? = null
 
@@ -69,6 +73,15 @@ class SpeedService : Service() {
     private var lastApiSpeedKmh = 0f
 
     private var isLowBatteryMode = false
+
+    // --- 📓 Logbook State ---
+    private var isLoggingActive = false
+    private var logStartTime = 0L
+    private var logMaxSpeed = 0
+    private var logSpeedSum = 0L
+    private var logSampleCount = 0
+    private var logStartLocation: Location? = null
+    private var lastSpeedingTime = 0L
 
     private companion object {
         const val CHANNEL_ID = "SpeedServiceChannel"
@@ -96,6 +109,7 @@ class SpeedService : Service() {
         settingsManager = SettingsManager(this)
         hardwareHelper = HardwareHelper(this)
         motionDetector = MotionDetector(this)
+        logManager = LogManager(this)
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
 
         overlayManager = OverlayManager(this, settingsManager) {
@@ -136,7 +150,7 @@ class SpeedService : Service() {
 
     private fun enableBatterySaver() {
         isLowBatteryMode = true
-        motionDetector.stop() // Stop sensor fusion to save power
+        motionDetector.stop()
         restartLocationUpdates()
         Toast.makeText(this, "Akkusparmodus aktiv: GPS gedrosselt", Toast.LENGTH_SHORT).show()
     }
@@ -217,18 +231,13 @@ class SpeedService : Service() {
             isAudioMuted = settingsManager.isAudioMutedTemporary
         ))
 
-        if (speeding && currentLimit != null && currentLimit!! > 0) {
-            if (!isCurrentlySpeeding && settingsManager.isAudioWarningEnabled && !settingsManager.isAudioMutedTemporary) {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
-            }
-        }
-        isCurrentlySpeeding = speeding
+        handleSpeedingAlerts(speed, speeding)
+        handleLogbook(speed, location)
 
         val speedKmh = location.speed * 3.6f
         val time = System.currentTimeMillis()
         val dist = lastApiLocation?.distanceTo(location) ?: Float.MAX_VALUE
 
-        // --- 🤖 Intelligent Trigger Logic ---
         val significantSpeedChange = abs(speedKmh - lastApiSpeedKmh) > Config.SPEED_CHANGE_TRIGGER_KMH
         val isJunctionMode = speedKmh < Config.JUNCTION_SPEED_THRESHOLD_KMH
 
@@ -242,7 +251,6 @@ class SpeedService : Service() {
 
         var minDistance = if (significantSpeedChange || isJunctionMode) 10f else Config.API_CALL_MIN_DISTANCE_METERS
 
-        // Apply Battery Saver Multipliers
         if (isLowBatteryMode) {
             dynamicInterval *= 2
             minDistance *= Config.BATTERY_SAVER_API_DIST_MULT
@@ -253,6 +261,75 @@ class SpeedService : Service() {
             lastApiLocation = location
             lastApiSpeedKmh = speedKmh
             fetchSpeedLimit(location.latitude, location.longitude, location.bearing, speedKmh)
+        }
+    }
+
+    private fun handleSpeedingAlerts(speed: Int, speeding: Boolean) {
+        if (speeding && currentLimit != null && currentLimit!! > 0) {
+            if (!isCurrentlySpeeding && settingsManager.isAudioWarningEnabled && !settingsManager.isAudioMutedTemporary) {
+                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
+            }
+        }
+        isCurrentlySpeeding = speeding
+    }
+
+    private fun handleLogbook(speed: Int, location: Location) {
+        val time = System.currentTimeMillis()
+        val limit = currentLimit ?: 0
+        val isDeviation = limit > 0 && speed > (limit + Config.LOG_SPEED_THRESHOLD_KMH)
+
+        if (isDeviation) {
+            lastSpeedingTime = time
+            if (!isLoggingActive) {
+                startLog(speed, location, limit)
+            } else {
+                updateLog(speed)
+            }
+        } else if (isLoggingActive) {
+            if (time - lastSpeedingTime > (Config.LOG_COOLDOWN_SECONDS * 1000L)) {
+                finishLog(location)
+            } else {
+                updateLog(speed) // We keep logging during cooldown for avg calculation
+            }
+        }
+    }
+
+    private fun startLog(speed: Int, location: Location, limit: Int) {
+        isLoggingActive = true
+        logStartTime = System.currentTimeMillis()
+        logMaxSpeed = speed
+        logSpeedSum = speed.toLong()
+        logSampleCount = 1
+        logStartLocation = location
+    }
+
+    private fun updateLog(speed: Int) {
+        if (speed > logMaxSpeed) logMaxSpeed = speed
+        logSpeedSum += speed
+        logSampleCount++
+    }
+
+    private fun finishLog(endLocation: Location) {
+        isLoggingActive = false
+        val startLoc = logStartLocation ?: return
+        val avgSpeed = (logSpeedSum / logSampleCount).toInt()
+
+        val entry = LogEntry(
+            id = UUID.randomUUID().toString(),
+            startTime = logStartTime,
+            endTime = System.currentTimeMillis(),
+            speedLimit = currentLimit ?: 0,
+            maxSpeed = logMaxSpeed,
+            avgSpeed = avgSpeed,
+            startLat = startLoc.latitude,
+            startLon = startLoc.longitude,
+            endLat = endLocation.latitude,
+            endLon = endLocation.longitude,
+            unit = if (settingsManager.useMph) "mph" else "km/h"
+        )
+
+        serviceScope.launch(Dispatchers.IO) {
+            logManager.saveLog(entry)
         }
     }
 
@@ -278,5 +355,10 @@ class SpeedService : Service() {
         unregisterReceiver(batteryReceiver)
         if (::fusedLocationClient.isInitialized) fusedLocationClient.removeLocationUpdates(locationCallback)
         speedProcessor.clearHistory()
+
+        if (isLoggingActive) {
+            // Optional: Close active log on service destroy
+            // last known location is not available here easily, so we skip or use startLoc
+        }
     }
 }
