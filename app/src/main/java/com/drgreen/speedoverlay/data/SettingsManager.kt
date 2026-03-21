@@ -32,7 +32,6 @@ class SettingsManager(context: Context) {
     }
 
     private fun notifyListeners(key: String) {
-        // Create a copy to avoid ConcurrentModificationException if a listener removes itself
         val currentListeners = synchronized(listeners) { listeners.toList() }
         currentListeners.forEach { it.onSettingChanged(key) }
     }
@@ -51,6 +50,7 @@ class SettingsManager(context: Context) {
         const val KEY_OVERLAY_TEXT_COLOR = "overlay_text_color"
         const val KEY_DISCLAIMER_ACCEPTED = "disclaimer_accepted"
         const val KEY_SHOW_SPEED_CAMERAS = "show_speed_cameras"
+        const val KEY_BATTERY_OPTIMIZATION = "battery_optimization"
 
         const val KEY_DARK_MODE = "dark_mode"
         const val KEY_LANGUAGE = "language"
@@ -107,6 +107,10 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean(KEY_SHOW_SPEED_CAMERAS, false)
         set(value) { prefs.edit { putBoolean(KEY_SHOW_SPEED_CAMERAS, value) }; notifyListeners(KEY_SHOW_SPEED_CAMERAS) }
 
+    var isBatteryOptimizationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_OPTIMIZATION, true)
+        set(value) { prefs.edit { putBoolean(KEY_BATTERY_OPTIMIZATION, value) }; notifyListeners(KEY_BATTERY_OPTIMIZATION) }
+
     var darkMode: Int
         get() = prefs.getInt(KEY_DARK_MODE, 0)
         set(value) {
@@ -121,10 +125,7 @@ class SettingsManager(context: Context) {
         get() {
             val systemLanguage = Locale.getDefault().language
             val defaultLang = when (systemLanguage) {
-                "de" -> "de"
-                "es" -> "es"
-                "fr" -> "fr"
-                "it" -> "it"
+                "de" -> "de"; "es" -> "es"; "fr" -> "fr"; "it" -> "it"
                 else -> "en"
             }
             return prefs.getString(KEY_LANGUAGE, defaultLang) ?: defaultLang

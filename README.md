@@ -1,37 +1,40 @@
-# Speed Overlay Pro
+# Speed Overlay Pro (v1.2)
 
 Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtzeit-Tempolimits aus OpenStreetMap (OSM) mit deiner aktuellen GPS-Geschwindigkeit kombiniert.
 
-## ✨ Hauptmerkmale (v1.4)
-- **Ultra-Low-Latency GPS:** Erhöhte Abtastrate (2.5 Hz) für verzögerungsfreie Geschwindigkeitsanzeige.
-- **Smarte Schild-Vorschau (Pre-fetching):** Erweiterter Suchradius (150m) antizipiert kommende Tempolimits.
-- **Sensor-Fusion (Neu):** Nutzt Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand (kein GPS-Wandern).
-- **Zusatzschilder & Sicherheit:**
-    - Anzeige von **Gefahrenstellen** und **Schulzonen**.
-    - Spezielle Icons für **unbegrenzte** Autobahnabschnitte und **variable Schilderbrücken**.
-    - Optionale **Blitzer-Warnung** (eigenverantwortlich aktivierbar).
-- **Interaktives Overlay:**
-    - **Ton-Status Icon:** Kleine Glocke direkt im Overlay zeigt an, ob die akustische Warnung aktiv ist.
-    - **Mute per Long-Click:** Stummschalten der Audio-Warnung direkt auf dem Overlay mit visuellem Feedback (Flash).
-- **Erweiterter Autostart:** Startet automatisch bei **Stromverbindung** (ideal für Head-Units/Fahrzeuge ohne Bluetooth).
-- **Hardware-Optimiert:** Läuft auf allen Geräten von Android 9 (Head-Units) bis Android 14+.
+## ✨ Hauptmerkmale (v1.2)
 
-## 🛠 Technische Highlights
-- **Richtungsabhängige Logik:** Gleicht die Fahrtrichtung (Bearing) mit der Straßengeometrie ab, um falsche Limits auf Parallelstraßen zu vermeiden.
-- **Automatisches UI-Sync:** Einstellungsänderungen am Overlay (z.B. Mute) werden in Echtzeit mit dem Dashboard synchronisiert.
-- **Zentralisierte Konfiguration:** Alle Parameter über `Config.kt` steuerbar.
-- **Architektur:** Sauber getrennt in `data`, `logic`, `service` und `ui` (mit eigenem `OverlayManager`).
+### 🧠 Intelligente Datenverarbeitung
+- **Predictive Pre-fetching:** Dynamischer Suchradius (bis zu 600m), der sich linear mit deiner Geschwindigkeit skaliert. Sieht bis zu 12 Sekunden in die Zukunft voraus.
+- **Smart Road Filtering:** Gewichtet Straßentypen (z.B. Autobahn vs. Wohngebiet) basierend auf der aktuellen Geschwindigkeit, um Fehl-Anzeigen auf Parallelstraßen zu vermeiden.
+- **Junction Mode:** Erhöhte Sensitivität an Kreuzungen (< 25 km/h), um Abbiegevorgänge zu antizipieren und das neue Limit sofort zu erfassen.
+- **Offline Resilience:** Lokaler Cache für bis zu 100 Straßen-Segmente überbrückt Funklöcher von bis zu 10 Minuten.
+
+### ⚡ Performance & Akku
+- **Adaptive Battery Saver:** Drosselt GPS-Intervalle und pausiert Sensoren bei niedrigem Akkustand (< 20%) automatisch (einstellbar).
+- **Sensor-Fusion:** Nutzt Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand (kein GPS-Wandern).
+- **Ultra-Low-Latency GPS:** Erhöhte Abtastrate für verzögerungsfreie Anzeige.
+
+### 🛡 Sicherheit & Interaktion
+- **Zusatzschilder:** Anzeige von Gefahrenstellen, Schulzonen, unbegrenzten Abschnitten und variablen Schilderbrücken.
+- **Interaktives Overlay:** Ton-Status Anzeige und Mute per Long-Click mit visuellem Feedback (Flash).
+- **Autostart:** Startet automatisch bei Bluetooth-Verbindung oder Stromverbindung (ideal für Head-Units).
+
+## 🛠 Architektur & Technik
+- **Stack:** Kotlin, Coroutines, Retrofit, FusedLocationProvider.
+- **Modularität:** Sauber getrennt in `data`, `logic`, `service` und `ui`.
+- **Anpassbarkeit:** Alle Parameter zentral in `Config.kt` steuerbar.
 
 ## 🚀 Installation & Start
-1. App öffnen und Berechtigungen erteilen.
-2. In den Einstellungen "Start bei Stromverbindung" oder "Bluetooth" wählen.
+1. App öffnen und Berechtigungen (Standort, Overlay) erteilen.
+2. In den Einstellungen gewünschte Autostart-Optionen wählen.
 3. Auf "Start Service" tippen.
 
-## ⚖️ Rechtlicher Hinweis
-Die Nutzung von Blitzer-Warnfunktionen ist in einigen Ländern während der Fahrt untersagt. Die Funktion ist standardmäßig deaktiviert und die Nutzung erfolgt auf eigene Gefahr.
-
 ## 🧪 Tests ausführen
-Um die Integrität der Logik zu prüfen, führe folgenden Befehl aus:
+Die Core-Logik ist durch Unit-Tests in `SpeedProcessorTest` und `SpeedRepositoryTest` abgesichert:
 ```bash
 ./gradlew test
 ```
+
+## ⚖️ Rechtlicher Hinweis
+Die Nutzung von Blitzer-Warnfunktionen ist in einigen Ländern während der Fahrt untersagt. Die Funktion ist standardmäßig deaktiviert und die Nutzung erfolgt auf eigene Gefahr.
