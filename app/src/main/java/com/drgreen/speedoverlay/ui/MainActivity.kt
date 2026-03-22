@@ -4,278 +4,261 @@
 
 package com.drgreen.speedoverlay.ui
 
-import android.annotation.SuppressLint
-import android.bluetooth.BluetoothManager
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.res.Configuration
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.provider.Settings
-import android.text.Html
-import android.view.View
-import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.Filter
-import android.widget.TextView
-import android.widget.Toast
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.drgreen.speedoverlay.R
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.service.SpeedService
+import com.drgreen.speedoverlay.ui.components.*
 import com.drgreen.speedoverlay.util.PermissionManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.slider.Slider
-import com.google.android.material.textfield.MaterialAutoCompleteTextView
-import java.util.Locale
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
-class MainActivity : AppCompatActivity(), SettingsManager.OnSettingsChangedListener {
+/**
+ * Der Haupteinstiegspunkt der App. Verwaltet Einstellungen, Onboarding und den Service-Start.
+ * Nutzt AppCompatActivity zur besseren Unterstützung von AppCompatDelegate (z.B. Sprachumschaltung).
+ */
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity() {
 
-    private companion object {
-        val LANGUAGES = listOf("en", "de", "es", "fr", "it")
-    }
-
-    private val settings by lazy { SettingsManager(this) }
-    private val permissionManager by lazy { PermissionManager(this) }
+    @Inject lateinit var settingsManager: SettingsManager
+    @Inject lateinit var logManager: LogManager
+    @Inject lateinit var permissionManager: PermissionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        settings.applySettings()
-        setContentView(R.layout.activity_main)
+        enableEdgeToEdge()
 
-        if (!settings.isDisclaimerAccepted) showDisclaimer()
-        else checkBatteryOptimization()
+        // Initialisiert die gespeicherten Einstellungen (Sprache, Dark Mode)
+        settingsManager.applySettings()
 
-        setupUI()
-        settings.addListener(this)
-    }
+        setContent {
+            val darkModeState by settingsManager.darkModeFlow.collectAsStateWithLifecycle(initialValue = 0)
+            val isDisclaimerAccepted = remember { mutableStateOf(settingsManager.isDisclaimerAccepted) }
 
-    override fun onDestroy() {
-        settings.removeListener(this)
-        super.onDestroy()
-    }
+            // Permission states that refresh on ON_RESUME
+            var hasLocation by remember { mutableStateOf(permissionManager.hasLocationPermission()) }
+            var hasOverlay by remember { mutableStateOf(permissionManager.hasOverlayPermission()) }
 
-    override fun onSettingChanged(key: String) {
-        if (key == SettingsManager.KEY_AUDIO_MUTED_TEMPORARY || key == SettingsManager.KEY_AUDIO_WARNING) {
-            runOnUiThread {
-                updateAudioSwitchState()
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                hasLocation = permissionManager.hasLocationPermission()
+                hasOverlay = permissionManager.hasOverlayPermission()
             }
-        }
-    }
 
-    private fun updateAudioSwitchState() {
-        val switchAudio = findViewById<MaterialSwitch>(R.id.switch_audio)
-        // Wenn temporär stummgeschaltet, Schalter visuell auf AUS, sonst nach Haupteinstellung
-        switchAudio?.isChecked = settings.isAudioWarningEnabled && !settings.isAudioMutedTemporary
-    }
-
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        setContentView(R.layout.activity_main)
-        setupUI()
-    }
-
-    private fun setupUI() {
-        findViewById<Button>(R.id.btn_start).setOnClickListener {
-            handleStartService()
-        }
-        findViewById<Button>(R.id.btn_stop).setOnClickListener { stopSpeedService() }
-
-        val btnDevice = findViewById<Button>(R.id.btn_select_device)
-        findViewById<MaterialSwitch>(R.id.switch_autostart).apply {
-            isChecked = settings.isAutostartBtEnabled
-            btnDevice.visibility = if (isChecked) View.VISIBLE else View.GONE
-            setOnCheckedChangeListener { _, checked ->
-                settings.isAutostartBtEnabled = checked
-                btnDevice.visibility = if (checked) View.VISIBLE else View.GONE
-                if (checked) handleBluetoothRequirement(btnDevice)
+            val isDarkTheme = when (darkModeState) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
             }
-        }
 
-        findViewById<MaterialSwitch>(R.id.switch_autostart_power)?.apply {
-            isChecked = settings.isAutostartPowerEnabled
-            setOnCheckedChangeListener { _, checked ->
-                settings.isAutostartPowerEnabled = checked
-            }
-        }
-
-        btnDevice.setOnClickListener { showDeviceSelectionDialog(it as Button) }
-        updateDeviceButtonText(btnDevice)
-
-        // Audio Switch initialisieren
-        updateAudioSwitchState()
-        findViewById<MaterialSwitch>(R.id.switch_audio)?.setOnCheckedChangeListener { _, checked ->
-            settings.isAudioWarningEnabled = checked
-            if (checked) settings.isAudioMutedTemporary = false // Reset Mute wenn manuell aktiviert
-        }
-
-        bindSwitch(R.id.switch_unit, settings.useMph) { settings.useMph = it }
-
-        bindSlider(R.id.slider_tolerance, R.id.tv_tolerance_value, settings.tolerance.toFloat(), "%.0f") { settings.tolerance = it.toInt() }
-        bindSlider(R.id.slider_size, R.id.tv_size_value, settings.overlaySize, "%.1fx") { settings.overlaySize = it }
-        bindSlider(R.id.slider_alpha, R.id.tv_alpha_value, settings.overlayAlpha, "%d%%", 100f) { settings.overlayAlpha = it }
-
-        setupDropdowns()
-    }
-
-    private fun handleStartService() {
-        when {
-            !permissionManager.hasLocationPermission() -> {
-                permissionManager.requestLocationPermission()
-            }
-            !permissionManager.hasOverlayPermission() -> {
-                permissionManager.requestOverlayPermission()
-            }
-            !permissionManager.hasNotificationPermission() -> {
-                permissionManager.requestNotificationPermission()
-            }
-            else -> {
-                startSpeedService()
-            }
-        }
-    }
-
-    private fun setupDropdowns() {
-        val darkOptions = arrayOf(R.string.dark_mode_auto, R.string.dark_mode_off, R.string.dark_mode_on).map { getString(it) }
-        setupExposedDropdown(R.id.dropdown_dark_mode, darkOptions, settings.darkMode) { settings.darkMode = it }
-
-        val langOptions = arrayOf(R.string.lang_en, R.string.lang_de, R.string.lang_es, R.string.lang_fr, R.string.lang_it).map { getString(it) }
-        val currentIdx = LANGUAGES.indexOf(settings.language).coerceAtLeast(0)
-        setupExposedDropdown(R.id.dropdown_language, langOptions, currentIdx) { settings.language = LANGUAGES[it] }
-    }
-
-    private fun setupExposedDropdown(id: Int, options: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit) {
-        val adapter = object : ArrayAdapter<String>(this, R.layout.list_item, options) {
-            override fun getFilter(): Filter {
-                return object : Filter() {
-                    override fun performFiltering(constraint: CharSequence?): FilterResults {
-                        val results = FilterResults()
-                        results.values = options
-                        results.count = options.size
-                        return results
-                    }
-                    override fun publishResults(constraint: CharSequence?, results: FilterResults?) {
-                        notifyDataSetChanged()
+            MaterialTheme(
+                colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    if (!isDisclaimerAccepted.value) {
+                        OnboardingScreen(
+                            onFinished = {
+                                settingsManager.isDisclaimerAccepted = true
+                                isDisclaimerAccepted.value = true
+                            },
+                            onGrantLocation = { permissionManager.requestLocationPermission(this) },
+                            onGrantOverlay = { permissionManager.requestOverlayPermission(this) },
+                            hasLocation = hasLocation,
+                            hasOverlay = hasOverlay
+                        )
+                    } else {
+                        MainScreen(
+                            settings = settingsManager,
+                            logManager = logManager,
+                            permissionManager = permissionManager,
+                            onStart = { startSpeedService() },
+                            onStop = { stopSpeedService() },
+                            currentDarkMode = darkModeState,
+                            activity = this
+                        )
                     }
                 }
             }
-        }
-
-        findViewById<MaterialAutoCompleteTextView>(id).apply {
-            setAdapter(adapter)
-            if (selectedIndex in options.indices) {
-                setText(options[selectedIndex], false)
-            }
-            setOnItemClickListener { _, _, position, _ -> onSelect(position) }
-        }
-    }
-
-    private fun bindSwitch(id: Int, initial: Boolean, onAction: (Boolean) -> Unit) {
-        findViewById<MaterialSwitch>(id)?.apply {
-            isChecked = initial
-            setOnCheckedChangeListener { _, checked -> onAction(checked) }
-        }
-    }
-
-    private fun bindSlider(sliderId: Int, textId: Int, initial: Float, format: String, factor: Float = 1f, onAction: (Float) -> Unit) {
-        val tv = findViewById<TextView>(textId)
-        findViewById<Slider>(sliderId)?.apply {
-            value = initial
-            tv.text = if (format.contains("%d")) String.format(format, (initial * factor).toInt()) else String.format(Locale.getDefault(), format, initial)
-            addOnChangeListener { _, v, _ ->
-                onAction(v)
-                tv.text = if (format.contains("%d")) String.format(format, (v * factor).toInt()) else String.format(Locale.getDefault(), format, v)
-            }
-        }
-    }
-
-    private fun handleBluetoothRequirement(btn: Button) {
-        if (!permissionManager.hasBluetoothPermission()) {
-            permissionManager.requestBluetoothPermission()
-        } else {
-            showDeviceSelectionDialog(btn)
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun updateDeviceButtonText(button: Button) {
-        val addr = settings.autostartBtDeviceAddress ?: return run { button.text = getString(R.string.select_bt_device) }
-        if (!permissionManager.hasBluetoothPermission()) { button.text = addr; return }
-
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-        val device = try { adapter?.getRemoteDevice(addr) } catch (e: Exception) { null }
-        button.text = device?.name ?: addr
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun showDeviceSelectionDialog(button: Button) {
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-        if (adapter?.isEnabled != true) return Toast.makeText(this, "Bluetooth error", Toast.LENGTH_SHORT).show()
-
-        val devices = adapter.bondedDevices.toList()
-        if (devices.isEmpty()) return Toast.makeText(this, "No devices", Toast.LENGTH_SHORT).show()
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.select_bt_device)
-            .setItems(devices.map { it.name ?: it.address }.toTypedArray()) { _, which ->
-                settings.autostartBtDeviceAddress = devices[which].address
-                updateDeviceButtonText(button)
-            }
-            .show()
-    }
-
-    private fun showDisclaimer() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.legal_disclaimer_title)
-            .setMessage(Html.fromHtml(getString(R.string.legal_disclaimer_text), Html.FROM_HTML_MODE_COMPACT))
-            .setCancelable(false)
-            .setPositiveButton(R.string.legal_accept) { _, _ -> settings.isDisclaimerAccepted = true; checkBatteryOptimization() }
-            .setNegativeButton(R.string.legal_decline) { _, _ -> finish() }
-            .show()
-    }
-
-    @SuppressLint("BatteryLife")
-    private fun checkBatteryOptimization() {
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !pm.isIgnoringBatteryOptimizations(packageName)) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.battery_opt_title)
-                .setMessage(R.string.battery_opt_message)
-                .setPositiveButton(R.string.battery_opt_ok) { _, _ ->
-                    val intent = try {
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply { data = Uri.parse("package:$packageName") }
-                    } catch (e: Exception) {
-                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                    }
-                    startActivity(intent)
-                }
-                .setNegativeButton(R.string.battery_opt_cancel, null)
-                .show()
         }
     }
 
     private fun startSpeedService() {
+        if (!permissionManager.hasLocationPermission()) {
+            permissionManager.requestLocationPermission(this)
+            return
+        }
+
+        if (!permissionManager.hasOverlayPermission()) {
+            permissionManager.requestOverlayPermission(this)
+            return
+        }
+
         val intent = Intent(this, SpeedService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
-    private fun stopSpeedService() = stopService(Intent(this, SpeedService::class.java))
+    private fun stopSpeedService() {
+        val intent = Intent(this, SpeedService::class.java)
+        stopService(intent)
+    }
+}
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-        when (requestCode) {
-            PermissionManager.REQ_LOCATION -> if (granted) {
-                handleStartService()
-            } else {
-                Toast.makeText(this, R.string.perm_rational, Toast.LENGTH_LONG).show()
-            }
-            PermissionManager.REQ_BT -> if (granted) updateDeviceButtonText(findViewById(R.id.btn_select_device))
-            PermissionManager.REQ_POST_NOTIFICATIONS -> if (granted) handleStartService()
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+    settings: SettingsManager,
+    logManager: LogManager,
+    permissionManager: PermissionManager,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    currentDarkMode: Int,
+    activity: MainActivity
+) {
+    val tolerance by settings.toleranceFlow.collectAsStateWithLifecycle(initialValue = 5)
+    val overlaySize by settings.overlaySizeFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val overlayAlpha by settings.overlayAlphaFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
+    val useMph by settings.useMphFlow.collectAsStateWithLifecycle(initialValue = false)
+    val audioWarning by settings.audioWarningFlow.collectAsStateWithLifecycle(initialValue = true)
+    val autostartBt by settings.autostartBtFlow.collectAsStateWithLifecycle(initialValue = false)
+    val autostartPower by settings.autostartPowerFlow.collectAsStateWithLifecycle(initialValue = false)
+    val autostartBtDevice by settings.autostartBtDeviceFlow.collectAsStateWithLifecycle(initialValue = null)
+    val language by settings.languageFlow.collectAsStateWithLifecycle(initialValue = "en")
+
+    val transparency = (1f - overlayAlpha).coerceIn(0f, 1f)
+    var showLogbook by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.ExtraBold) },
+                actions = {
+                    IconButton(onClick = { showLogbook = true }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Logbuch")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
         }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingsCard(title = "Service Control") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onStart,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.start_service), fontWeight = FontWeight.Bold)
+                    }
+                    FilledTonalButton(
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.stop_service), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            SettingsCard(title = stringResource(R.string.settings_title)) {
+                SettingSwitch(stringResource(R.string.use_mph), useMph) {
+                    settings.useMph = it
+                }
+                SettingSwitch(stringResource(R.string.audio_warning), audioWarning) {
+                    settings.isAudioWarningEnabled = it
+                    if (it) settings.isAudioMutedTemporary = false
+                }
+                SettingLanguage(currentLanguage = language) { newLang ->
+                    settings.language = newLang
+                }
+                SettingDarkMode(currentMode = currentDarkMode) { newMode ->
+                    settings.darkMode = newMode
+                }
+            }
+
+            SettingsCard(title = stringResource(R.string.automation_group)) {
+                SettingSwitch(stringResource(R.string.autostart_bt), autostartBt) {
+                    settings.isAutostartBtEnabled = it
+                    if (it && !permissionManager.hasBluetoothPermission()) {
+                        permissionManager.requestBluetoothPermission(activity)
+                    }
+                }
+                if (autostartBt) {
+                    SettingBluetoothDevice(currentAddress = autostartBtDevice) {
+                        settings.autostartBtDeviceAddress = it
+                    }
+                }
+                SettingSwitch(stringResource(R.string.autostart_power), autostartPower) {
+                    settings.isAutostartPowerEnabled = it
+                }
+            }
+
+            SettingsCard(title = stringResource(R.string.appearance_group)) {
+                SettingSlider(stringResource(R.string.tolerance_title), tolerance.toFloat(), 0f..30f, "%.0f km/h") {
+                    settings.tolerance = it.toInt()
+                }
+                SettingSlider(stringResource(R.string.overlay_size), overlaySize, 0.5f..2.5f, "%.1fx") {
+                    settings.overlaySize = it
+                }
+                SettingSlider(stringResource(R.string.overlay_alpha), transparency, 0f..1f, "%d%%", 100f) {
+                    settings.overlayAlpha = (1f - it).coerceIn(0f, 1f)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+
+    if (showLogbook) {
+        LogbookDialog(logManager = logManager, onDismiss = { showLogbook = false })
     }
 }

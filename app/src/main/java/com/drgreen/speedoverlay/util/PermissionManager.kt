@@ -6,19 +6,20 @@ package com.drgreen.speedoverlay.util
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 
 /**
- * Centrally manages permissions for the application, handling both legacy (Android 9)
- * and modern (Android 14+) requirements.
+ * Zentrales Management für Berechtigungen.
+ * Behandelt sowohl Legacy-Anforderungen (Android 9) als auch moderne (Android 16+).
  */
-class PermissionManager(private val activity: Activity) {
+open class PermissionManager(private val context: Context) {
 
     companion object {
         const val REQ_LOCATION = 100
@@ -27,20 +28,16 @@ class PermissionManager(private val activity: Activity) {
         const val REQ_POST_NOTIFICATIONS = 103
     }
 
-    /**
-     * Checks for location permission. Android 10+ requires background location
-     * for foreground services with type 'location', but since we use a
-     * Foreground Service, 'fine_location' is generally sufficient if the
-     * service is visible to the user.
-     */
-    fun hasLocationPermission(): Boolean {
+    /** Prüft auf Standortberechtigung (Fine Location). */
+    open fun hasLocationPermission(): Boolean {
         return ContextCompat.checkSelfPermission(
-            activity,
+            context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun requestLocationPermission() {
+    /** Fordert die Standortberechtigung an. */
+    open fun requestLocationPermission(activity: Activity) {
         ActivityCompat.requestPermissions(
             activity,
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
@@ -48,34 +45,40 @@ class PermissionManager(private val activity: Activity) {
         )
     }
 
-    fun hasOverlayPermission(): Boolean {
-        return Settings.canDrawOverlays(activity)
+    /** Prüft, ob die App über anderen Apps eingeblendet werden darf. */
+    open fun hasOverlayPermission(): Boolean {
+        return Settings.canDrawOverlays(context)
     }
 
-    fun requestOverlayPermission() {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            "package:${activity.packageName}".toUri()
-        )
-        activity.startActivityForResult(intent, REQ_OVERLAY)
-    }
-
-    /**
-     * Handles Bluetooth permissions which changed significantly in Android 12 (API 31).
-     */
-    fun hasBluetoothPermission(): Boolean {
-        return when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                ContextCompat.checkSelfPermission(
-                    activity,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
-            }
-            else -> true // Android 9-11 doesn't require runtime BLUETOOTH_CONNECT
+    /** Öffnet das System-Menü für die Overlay-Berechtigung. */
+    open fun requestOverlayPermission(activity: Activity) {
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${activity.packageName}")
+            )
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            activity.startActivity(intent)
         }
     }
 
-    fun requestBluetoothPermission() {
+    /** Prüft auf Bluetooth-Berechtigung (ab Android 12 erforderlich). */
+    open fun hasBluetoothPermission(): Boolean {
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+            else -> true
+        }
+    }
+
+    /** Fordert Bluetooth-Berechtigung an. */
+    open fun requestBluetoothPermission(activity: Activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             ActivityCompat.requestPermissions(
                 activity,
@@ -85,13 +88,11 @@ class PermissionManager(private val activity: Activity) {
         }
     }
 
-    /**
-     * Required for Android 13+ (API 33) to show the foreground service notification.
-     */
-    fun hasNotificationPermission(): Boolean {
+    /** Prüft auf Benachrichtigungsberechtigung (ab Android 13 erforderlich). */
+    open fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
-                activity,
+                context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         } else {
@@ -99,7 +100,8 @@ class PermissionManager(private val activity: Activity) {
         }
     }
 
-    fun requestNotificationPermission() {
+    /** Fordert Benachrichtigungsberechtigung an. */
+    open fun requestNotificationPermission(activity: Activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.requestPermissions(
                 activity,
@@ -109,7 +111,8 @@ class PermissionManager(private val activity: Activity) {
         }
     }
 
-    fun hasAllCriticalPermissions(): Boolean {
+    /** Prüft, ob alle für den Kernbetrieb kritischen Berechtigungen vorhanden sind. */
+    open fun hasAllCriticalPermissions(): Boolean {
         return hasLocationPermission() && hasOverlayPermission() && hasNotificationPermission()
     }
 }

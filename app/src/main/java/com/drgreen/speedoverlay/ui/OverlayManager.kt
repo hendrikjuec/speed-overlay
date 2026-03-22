@@ -9,180 +9,123 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.animation.AlphaAnimation
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.TextView
-import com.drgreen.speedoverlay.R
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistry
+import androidx.savedstate.SavedStateRegistryController
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
- * Manages the floating overlay UI, including layout, scaling, and state updates.
+ * Verwaltet das schwebende Overlay-Fenster unter Verwendung von Jetpack Compose.
+ * Nutzt reaktive Flows von SettingsManager für sofortige UI-Updates bei Einstellungsänderungen.
  */
 class OverlayManager(
     private val context: Context,
     private val settings: SettingsManager,
     private val onLongClick: () -> Unit
-) {
+) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private var overlayWrapper: FrameLayout? = null
-    private var innerContentView: View? = null
+    private var composeView: ComposeView? = null
     private lateinit var params: WindowManager.LayoutParams
 
-    private var tvCurrentSpeed: TextView? = null
-    private var tvSpeedLimit: TextView? = null
-    private var tvUnit: TextView? = null
-    private var ivHazard: ImageView? = null
-    private var ivCamera: ImageView? = null
-    private var ivMuteStatus: ImageView? = null
-    private var infoContainer: View? = null
+    private val overlayState = mutableStateOf<OverlayState?>(null)
 
+    // Lifecycle-Anforderungen für die Nutzung von ComposeView in einem Service
+    private val lifecycleRegistry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = lifecycleRegistry
+    override val viewModelStore = ViewModelStore()
+    private val savedStateRegistryController = SavedStateRegistryController.create(this)
+    override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
+
+    init {
+        savedStateRegistryController.performRestore(null)
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+    }
+
+    /** Erstellt und zeigt das Overlay-Fenster an. */
     @SuppressLint("ClickableViewAccessibility")
     fun show() {
-        if (overlayWrapper != null) return
+        if (composeView != null) return
 
-        // We create a wrapper that will stay at scale 1.0,
-        // but its size will match the scaled inner content.
-        overlayWrapper = FrameLayout(context)
+        composeView = ComposeView(context).apply {
+            // Notwendige Owner für Compose setzen
+            setViewTreeLifecycleOwner(this@OverlayManager)
+            setViewTreeViewModelStoreOwner(this@OverlayManager)
+            setViewTreeSavedStateRegistryOwner(this@OverlayManager)
 
-        innerContentView = LayoutInflater.from(context).inflate(R.layout.overlay_view, overlayWrapper, false)
-        innerContentView?.let { view ->
-            tvCurrentSpeed = view.findViewById(R.id.current_speed_text)
-            tvSpeedLimit = view.findViewById(R.id.speed_limit_text)
-            tvUnit = view.findViewById(R.id.unit_text)
-            ivHazard = view.findViewById(R.id.iv_hazard)
-            ivCamera = view.findViewById(R.id.iv_camera)
-            ivMuteStatus = view.findViewById(R.id.iv_mute_status)
-            infoContainer = view.findViewById(R.id.info_container)
+            setContent {
+                val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
+                val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
+                val color by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
 
-            overlayWrapper?.addView(view)
-
-            params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                else
-                    @Suppress("DEPRECATION")
-                    WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = 100
-                y = 100
+                overlayState.value?.let { state ->
+                    OverlayScreen(
+                        state = state,
+                        scale = size,
+                        alpha = alpha,
+                        textColor = color
+                    )
+                }
             }
-
-            // Pivot top-left for scaling
-            view.pivotX = 0f
-            view.pivotY = 0f
-
-            updateVisuals()
-
-            // The TouchListener should be on the wrapper or the content.
-            // Putting it on the wrapper ensures the whole window area is draggable.
-            overlayWrapper?.setOnTouchListener(OverlayTouchListener(windowManager, overlayWrapper!!, params, onLongClick))
-            windowManager.addView(overlayWrapper, params)
         }
-    }
 
-    fun updateState(state: OverlayState) {
-        tvCurrentSpeed?.text = state.currentSpeed.toString()
-        tvUnit?.text = state.unit
-
-        updateSpeedLimitUI(state.speedLimit)
-
-        ivHazard?.visibility = if (state.showHazard) View.VISIBLE else View.GONE
-        ivCamera?.visibility = if (state.showCamera) View.VISIBLE else View.GONE
-        infoContainer?.visibility = if (state.showHazard || state.showCamera) View.VISIBLE else View.GONE
-
-        ivMuteStatus?.setImageResource(
-            if (state.isAudioMuted) R.drawable.ic_notifications_off else R.drawable.ic_notifications
-        )
-        ivMuteStatus?.alpha = if (state.isAudioMuted) 0.5f else 1.0f
-
-        innerContentView?.setBackgroundResource(
-            if (state.isSpeeding && state.speedLimit != null && state.speedLimit > 0)
-                R.drawable.overlay_bg_warning
+        params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else
-                R.drawable.overlay_bg
-        )
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = settings.overlayX
+            y = settings.overlayY
+        }
 
-        updateVisuals()
+        composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
+
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        windowManager.addView(composeView, params)
     }
 
-    private fun updateSpeedLimitUI(limit: Int?) {
-        tvSpeedLimit?.let { tv ->
-            tv.alpha = 1.0f
-            when (limit) {
-                0 -> {
-                    tv.text = ""
-                    tv.setBackgroundResource(R.drawable.ic_unlimited)
-                }
-                -1 -> {
-                    tv.text = ""
-                    tv.setBackgroundResource(R.drawable.ic_variable)
-                }
-                null -> {
-                    tv.text = "--"
-                    tv.setBackgroundResource(R.drawable.speed_limit_bg_unknown)
-                }
-                else -> {
-                    tv.text = limit.toString()
-                    tv.setBackgroundResource(R.drawable.speed_limit_bg)
-                }
-            }
-        }
+    /** Aktualisiert die anzuzeigenden Daten (Geschwindigkeit, Limit etc.). */
+    fun updateState(state: OverlayState) {
+        overlayState.value = state
     }
 
     fun flash() {
-        innerContentView?.let {
-            val anim = AlphaAnimation(0.3f, 1.0f)
-            anim.duration = 200
-            it.startAnimation(anim)
-        }
+        // Compose handhabt Animationen intern in OverlayScreen basierend auf State-Änderungen
     }
 
-    private fun updateVisuals() {
-        val view = innerContentView ?: return
-        val wrapper = overlayWrapper ?: return
-        val scale = settings.overlaySize
-
-        // 1. Scale the inner view
-        view.scaleX = scale
-        view.scaleY = scale
-        view.alpha = settings.overlayAlpha
-        tvCurrentSpeed?.setTextColor(settings.overlayTextColor)
-
-        // 2. Measure the original size
-        view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-        val scaledWidth = (view.measuredWidth * scale).toInt()
-        val scaledHeight = (view.measuredHeight * scale).toInt()
-
-        // 3. Force the wrapper to be exactly the scaled size
-        val wrapperParams = view.layoutParams
-        wrapperParams.width = scaledWidth
-        wrapperParams.height = scaledHeight
-        view.layoutParams = wrapperParams
-
-        // 4. Update the WindowManager window size
-        params.width = scaledWidth
-        params.height = scaledHeight
-
-        try {
-            windowManager.updateViewLayout(wrapper, params)
-        } catch (e: Exception) {}
-    }
-
+    /** Entfernt das Overlay-Fenster vom Bildschirm. */
     fun hide() {
-        overlayWrapper?.let {
+        composeView?.let {
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
             windowManager.removeView(it)
-            overlayWrapper = null
-            innerContentView = null
+            composeView = null
         }
+        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+    }
+
+    /** Gibt Ressourcen frei. */
+    fun release() {
+        // No-op, da Flows über den Compose-Lifecycle verwaltet werden.
     }
 }

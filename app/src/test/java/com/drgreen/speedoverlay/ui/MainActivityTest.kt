@@ -5,58 +5,51 @@
 package com.drgreen.speedoverlay.ui
 
 import android.os.Build
-import android.widget.AutoCompleteTextView
-import androidx.test.core.app.ActivityScenario
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.drgreen.speedoverlay.R
-import com.drgreen.speedoverlay.data.SettingsManager
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [Build.VERSION_CODES.P])
+@Config(sdk = [Build.VERSION_CODES.S]) // S is needed for some modern Compose/AppCompat features in Robolectric
 class MainActivityTest {
 
+    @get:Rule
+    val composeTestRule = createAndroidComposeRule<MainActivity>()
+
     @Test
-    fun testLanguageSelectionSync() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                val dropdownLanguage = activity.findViewById<AutoCompleteTextView>(R.id.dropdown_language)
-                val settingsManager = SettingsManager(activity)
+    fun testLanguageSelectionChangesLocale() {
+        // Wir gehen davon aus, dass der Disclaimer bereits akzeptiert wurde oder wir uns im MainScreen befinden
+        // In einem echten Test würde man hier Hilt nutzen, um den SettingsManager zu mocken.
 
-                // Force English
-                settingsManager.language = "en"
+        // Suche nach dem Sprach-Button (Standard "English" oder "EN")
+        composeTestRule.onNodeWithText("English", ignoreCase = true).performClick()
 
-                // Trigger selection of German (index 1) via the listener
-                // In Robolectric, we can pass null for the AdapterView
-                dropdownLanguage.onItemClickListener?.onItemClick(
-                    null, null, 1, 1L
-                )
+        // Wähle "Deutsch" aus dem Dropdown
+        composeTestRule.onNodeWithText("Deutsch", ignoreCase = true).performClick()
 
-                assertEquals("de", settingsManager.language)
-            }
-        }
+        // Überprüfe, ob der AppCompatDelegate die Sprache geändert hat
+        composeTestRule.waitForIdle()
+        assertEquals("de", AppCompatDelegate.getApplicationLocales().get(0)?.language)
     }
 
     @Test
-    fun testDarkModeSelectionSync() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                val dropdownDarkMode = activity.findViewById<AutoCompleteTextView>(R.id.dropdown_dark_mode)
-                val settingsManager = SettingsManager(activity)
+    fun testDarkModeToggle() {
+        // Suche nach dem Dark Mode Button
+        composeTestRule.onNodeWithText("System Default", ignoreCase = true).performClick()
 
-                // Set to Auto (0)
-                settingsManager.darkMode = 0
+        // Wähle "On"
+        composeTestRule.onNodeWithText("On", ignoreCase = true).performClick()
 
-                // Select "Off" (index 1)
-                dropdownDarkMode.onItemClickListener?.onItemClick(
-                    null, null, 1, 1L
-                )
-
-                assertEquals(1, settingsManager.darkMode)
-            }
-        }
+        // Überprüfe den Delegate Status
+        composeTestRule.waitForIdle()
+        assertEquals(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.getDefaultNightMode())
     }
 }

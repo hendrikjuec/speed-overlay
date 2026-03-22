@@ -1,37 +1,43 @@
-# Speed Overlay Pro
+# Speed Overlay
 
-Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtzeit-Tempolimits aus OpenStreetMap (OSM) mit deiner aktuellen GPS-Geschwindigkeit kombiniert.
+Ein intelligentes Android-Overlay, das das aktuelle Tempolimit basierend auf OpenStreetMap-Daten anzeigt.
 
-## ✨ Hauptmerkmale (v1.4)
-- **Ultra-Low-Latency GPS:** Erhöhte Abtastrate (2.5 Hz) für verzögerungsfreie Geschwindigkeitsanzeige.
-- **Smarte Schild-Vorschau (Pre-fetching):** Erweiterter Suchradius (150m) antizipiert kommende Tempolimits.
-- **Sensor-Fusion (Neu):** Nutzt Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand (kein GPS-Wandern).
-- **Zusatzschilder & Sicherheit:**
-    - Anzeige von **Gefahrenstellen** und **Schulzonen**.
-    - Spezielle Icons für **unbegrenzte** Autobahnabschnitte und **variable Schilderbrücken**.
-    - Optionale **Blitzer-Warnung** (eigenverantwortlich aktivierbar).
-- **Interaktives Overlay:**
-    - **Ton-Status Icon:** Kleine Glocke direkt im Overlay zeigt an, ob die akustische Warnung aktiv ist.
-    - **Mute per Long-Click:** Stummschalten der Audio-Warnung direkt auf dem Overlay mit visuellem Feedback (Flash).
-- **Erweiterter Autostart:** Startet automatisch bei **Stromverbindung** (ideal für Head-Units/Fahrzeuge ohne Bluetooth).
-- **Hardware-Optimiert:** Läuft auf allen Geräten von Android 9 (Head-Units) bis Android 14+.
+## Features
+- **Echtzeit-Anzeige**: Überlagert Navigations-Apps wie Google Maps.
+- **OSM-Integration**: Erkennt Tempolimits basierend auf GPS-Koordinaten und OSM-Tags.
+- **Sprachumschaltung**: Unterstützung für Deutsch, Englisch, Spanisch, Französisch und Italienisch. Die App nutzt moderne Android-APIs (LocaleConfig) für konsistente Lokalisierung.
+- **EU-Regelwerk**: Implementiert implizite Tempolimits für alle EU-Mitgliedstaaten (z.B. 100 km/h auf deutschen Landstraßen, 80 km/h in Frankreich).
+- **Intelligente Warnung**: Akustische und visuelle Warnungen bei Überschreitung (einstellbare Toleranz).
+- **Automatisierung**:
+    - **Bluetooth-Autostart**: Startet den Dienst automatisch bei Verbindung mit einem spezifischen, in den Einstellungen ausgewählten Bluetooth-Gerät.
+    - **Strom-Autostart**: Startet die App automatisch beim Anschließen an eine Stromquelle.
+- **Notification-Control**: Schnelles Stoppen des Dienstes direkt über die Benachrichtigung (optimiert für Android 13+).
+- **Dark Mode**: Volle Unterstützung für systemweiten Dunkelmodus.
 
-## 🛠 Technische Highlights
-- **Richtungsabhängige Logik:** Gleicht die Fahrtrichtung (Bearing) mit der Straßengeometrie ab, um falsche Limits auf Parallelstraßen zu vermeiden.
-- **Automatisches UI-Sync:** Einstellungsänderungen am Overlay (z.B. Mute) werden in Echtzeit mit dem Dashboard synchronisiert.
-- **Zentralisierte Konfiguration:** Alle Parameter über `Config.kt` steuerbar.
-- **Architektur:** Sauber getrennt in `data`, `logic`, `service` und `ui` (mit eigenem `OverlayManager`).
+## Architektur
+- **Jetpack Compose**: Moderne UI-Entwicklung.
+- **AppCompat & DataStore**: Kombinierte Nutzung von `AppCompatDelegate` für Lokalisierung und Jetpack DataStore für Persistenz.
+- **Hilt**: Dependency Injection für saubere Testbarkeit.
+- **Service-Based**: Hintergrunddienst für stabilen Betrieb während der Navigation.
 
-## 🚀 Installation & Start
-1. App öffnen und Berechtigungen erteilen.
-2. In den Einstellungen "Start bei Stromverbindung" oder "Bluetooth" wählen.
-3. Auf "Start Service" tippen.
+## Berechtigungen
+Die App benötigt folgende Berechtigungen für den vollen Funktionsumfang:
+- **Standort**: Zur Bestimmung der Position und des Tempolimits.
+- **Overlay**: Zum Anzeigen der Geschwindigkeit über anderen Apps.
+- **Bluetooth**: Für die Geräteauswahl beim Autostart (ab Android 12).
+- **Benachrichtigungen**: Für die Dienst-Steuerung (ab Android 13).
 
-## ⚖️ Rechtlicher Hinweis
-Die Nutzung von Blitzer-Warnfunktionen ist in einigen Ländern während der Fahrt untersagt. Die Funktion ist standardmäßig deaktiviert und die Nutzung erfolgt auf eigene Gefahr.
-
-## 🧪 Tests ausführen
-Um die Integrität der Logik zu prüfen, führe folgenden Befehl aus:
+## Installation & Tests
+Führen Sie die Unit-Tests mit Gradle aus:
 ```bash
 ./gradlew test
 ```
+
+Um spezifische Tests für die Einstellungen, Bluetooth-Logik und Lokalisierung auszuführen:
+```bash
+./gradlew :app:testDebugUnitTest --tests "com.drgreen.speedoverlay.data.SettingsManagerTest"
+./gradlew :app:testDebugUnitTest --tests "com.drgreen.speedoverlay.service.BluetoothReceiverTest"
+```
+
+## Rechtliches
+Die Nutzung erfolgt auf eigene Gefahr. Die App ersetzt nicht den aufmerksamen Blick auf echte Verkehrsschilder.

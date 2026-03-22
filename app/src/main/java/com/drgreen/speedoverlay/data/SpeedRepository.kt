@@ -7,93 +7,179 @@ package com.drgreen.speedoverlay.data
 import android.location.Location
 import com.drgreen.speedoverlay.logic.OsmParser
 import com.drgreen.speedoverlay.util.Config
+import com.drgreen.speedoverlay.util.GeoUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import kotlin.math.*
+import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class SpeedRepository {
-    private val retrofit = Retrofit.Builder()
-        .baseUrl(Config.OVERPASS_BASE_URL)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-
-    private val overpassApi = retrofit.create(OverpassApi::class.java)
-    private val osmParser = OsmParser()
+/**
+ * Repository für Geschwindigkeitsbegrenzungen.
+ * Ruft Daten von der Overpass API ab und verwaltet einen Offline-Cache für Ausfallsicherheit.
+ */
+@Singleton
+class SpeedRepository @Inject constructor(
+    private val overpassApi: OverpassApi,
+    private val osmParser: OsmParser
+) {
+    // Shared Element Cache für Offline-Fallback
+    private val elementCache = ConcurrentHashMap<Long, Pair<Element, Long>>()
 
     private var cachedLimit: Int? = null
     private var cachedInfo: List<String> = emptyList()
+    private var cachedConfidence: Boolean = false
     private var cachedLocation: Location? = null
     private var cachedTimestamp: Long = 0L
 
-    suspend fun fetchSpeedLimit(lat: Double, lon: Double, heading: Float? = null, showCameras: Boolean = false): SpeedResult<Int?> = withContext(Dispatchers.IO) {
+    /**
+     * Ruft das Tempolimit für die aktuelle Position ab.
+     * Nutzt einen Kurzzeit-Cache für Performance und einen Langzeit-Element-Cache für Offline-Betrieb.
+     *
+     * @param lat Breitengrad
+     * @param lon Längengrad
+     * @param heading Aktuelle Fahrtrichtung in Grad
+     * @param speedKmh Aktuelle Geschwindigkeit in km/h (beeinflusst Suchradius)
+     * @param showCameras Ob Blitzer-Infos mit einbezogen werden sollen
+     */
+    suspend fun fetchSpeedLimit(
+        lat: Double,
+        lon: Double,
+        heading: Float? = null,
+        speedKmh: Float = 0f,
+        showCameras: Boolean = false
+    ): SpeedResult<Int?> = withContext(Dispatchers.IO) {
         val currentTime = System.currentTimeMillis()
         val currentLocation = Location("").apply {
             latitude = lat
             longitude = lon
         }
 
+        // --- Kurzzeit-Cache Validierung ---
         if (cachedLimit != null &&
             currentTime - cachedTimestamp < Config.CACHE_EXPIRATION_MS &&
-            cachedLocation?.distanceTo(currentLocation) ?: Float.MAX_VALUE < Config.CACHE_DISTANCE_THRESHOLD_METERS) {
-            return@withContext SpeedResult.Success(cachedLimit, cachedInfo)
+            (cachedLocation?.distanceTo(currentLocation) ?: Float.MAX_VALUE) < Config.CACHE_DISTANCE_THRESHOLD_METERS) {
+            return@withContext SpeedResult.Success(cachedLimit, cachedInfo, cachedConfidence)
         }
 
         return@withContext try {
-            val query = "[out:json];way(around:${Config.SEARCH_RADIUS_METERS}, $lat, $lon)[highway];out tags geom;"
+            val speedMs = speedKmh / 3.6f
+            val dynamicRadius = (Config.BASE_SEARCH_RADIUS_METERS + (speedMs * Config.LOOKAHEAD_TIME_SECONDS))
+                .coerceAtMost(Config.MAX_SEARCH_RADIUS_METERS.toFloat())
+
+            val query = "[out:json];way(around:$dynamicRadius, $lat, $lon)[highway];out tags geom;"
             val response = overpassApi.getSpeedLimit(query)
 
-            val bestElement = if (heading != null) {
-                findBestElementWithHeading(response.elements, heading)
-            } else {
-                response.elements.firstOrNull()
+            // Offline-Cache mit allen abgerufenen Elementen aktualisieren
+            response.elements.forEach { element ->
+                elementCache[element.id] = element to (currentTime + Config.OFFLINE_CACHE_EXPIRATION_MS)
             }
+            cleanupCache()
 
-            val limit = osmParser.parseSpeedLimit(bestElement?.tags)
-            val info = osmParser.parseAdditionalInfo(bestElement?.tags, showCameras)
-
-            cachedLimit = limit
-            cachedInfo = info
-            cachedLocation = currentLocation
-            cachedTimestamp = currentTime
-
-            SpeedResult.Success(limit, info)
+            processBestMatch(response.elements, heading, speedKmh, showCameras, currentLocation)
         } catch (e: Exception) {
-            SpeedResult.Error("Failed to fetch speed limit", e)
-        }
-    }
+            // --- 🛡 Offline Resilienz-Strategie: Fallback auf Offline-Cache ---
+            val offlineElements = elementCache.values
+                .filter { it.second > currentTime }
+                .map { it.first }
 
-    private fun findBestElementWithHeading(elements: List<Element>, userHeading: Float): Element? {
-        val candidates = elements.mapNotNull { element ->
-            val wayHeading = calculateWayHeading(element.geometry) ?: return@mapNotNull null
-            val diff = abs(userHeading - wayHeading)
-            val normalizedDiff = if (diff > 180) 360 - diff else diff
-
-            val isOneway = element.tags?.get("oneway") == "yes"
-
-            if (normalizedDiff <= Config.HEADING_TOLERANCE_DEG) {
-                element to normalizedDiff
-            } else if (!isOneway && normalizedDiff >= (180 - Config.HEADING_TOLERANCE_DEG)) {
-                element to (180 - normalizedDiff)
+            if (offlineElements.isNotEmpty()) {
+                processBestMatch(offlineElements, heading, speedKmh, showCameras, currentLocation)
             } else {
-                null
+                SpeedResult.Error(e.message ?: "Netzwerkfehler und kein Offline-Cache verfügbar")
             }
         }
-        return candidates.minByOrNull { it.second }?.first
     }
 
-    private fun calculateWayHeading(geometry: List<GeometryPoint>?): Double? {
-        if (geometry == null || geometry.size < 2) return null
-        val p1 = geometry.first()
-        val p2 = geometry.last()
-        val lat1 = Math.toRadians(p1.lat)
-        val lon1 = Math.toRadians(p1.lon)
-        val lat2 = Math.toRadians(p2.lat)
-        val lon2 = Math.toRadians(p2.lon)
-        val y = sin(lon2 - lon1) * cos(lat2)
-        val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(lon2 - lon1)
-        val angle = Math.toDegrees(atan2(y, x))
-        return (angle + 360) % 360
+    private fun processBestMatch(
+        elements: List<Element>,
+        heading: Float?,
+        speedKmh: Float,
+        showCameras: Boolean,
+        currentLocation: Location
+    ): SpeedResult<Int?> {
+        if (elements.isEmpty()) return SpeedResult.Success(null, emptyList(), false)
+
+        // --- 🧠 Smart Road Filtering & Scoring ---
+        // Wählt die wahrscheinlichste Straße basierend auf Richtung und Distanz aus.
+        val bestElement = elements.maxByOrNull { element ->
+            calculateScore(element, heading, speedKmh, currentLocation)
+        } ?: elements.first()
+
+        val parseResult = osmParser.parseSpeedLimit(bestElement.tags)
+        val additionalInfo = osmParser.parseAdditionalInfo(bestElement.tags, showCameras)
+
+        val result = SpeedResult.Success(
+            data = parseResult.limit,
+            additionalInfo = additionalInfo,
+            isConfidenceHigh = parseResult.isConfidenceHigh
+        )
+
+        cachedLimit = result.data
+        cachedInfo = result.additionalInfo
+        cachedConfidence = result.isConfidenceHigh
+        cachedLocation = currentLocation
+        cachedTimestamp = System.currentTimeMillis()
+
+        return result
+    }
+
+    private fun calculateScore(element: Element, carHeading: Float?, speedKmh: Float, carLoc: Location): Double {
+        var score = 0.0
+
+        // 1. Distanz-Score (0.0 bis 1.0)
+        val minDistance = element.geometry?.minOfOrNull { GeoUtils.distanceToPoint(carLoc.latitude, carLoc.longitude, it) } ?: 100f
+        val distanceRatio = (minDistance / Config.MAX_SEARCH_RADIUS_METERS.toFloat()).toDouble().coerceIn(0.0, 1.0)
+        score += (1.0 - distanceRatio) * 2.0
+
+        // 2. Richtungs-Abgleich (Heading Match)
+        if (carHeading != null && element.geometry != null && element.geometry.size >= 2) {
+            val wayHeading = GeoUtils.calculateBearing(element.geometry[0], element.geometry.last())
+            val diff = GeoUtils.getHeadingDifference(carHeading, wayHeading).toDouble()
+
+            val tolerance = if (speedKmh < Config.JUNCTION_SPEED_THRESHOLD_KMH)
+                Config.JUNCTION_HEADING_TOLERANCE_DEG else Config.HEADING_TOLERANCE_DEG
+
+            if (diff <= tolerance) {
+                score += 3.0 // Starkes Signal, wenn die Richtung übereinstimmt
+            }
+        }
+
+        // 3. Straßentyp-Gewichtung basierend auf Geschwindigkeit
+        val type = element.tags?.get("highway") ?: ""
+        score += calculateTypeScore(type, speedKmh)
+
+        return score
+    }
+
+    private fun calculateTypeScore(type: String, speedKmh: Float): Double {
+        return when {
+            speedKmh > Config.HIGH_SPEED_THRESHOLD_KMH -> {
+                when (type) {
+                    "motorway", "motorway_link" -> 2.0
+                    "trunk", "trunk_link" -> 1.5
+                    "primary" -> 1.0
+                    else -> 0.1
+                }
+            }
+            speedKmh < Config.LOW_SPEED_THRESHOLD_KMH -> {
+                when (type) {
+                    "living_street", "residential" -> 1.5
+                    "service" -> 1.0
+                    else -> 0.5
+                }
+            }
+            else -> 0.5
+        }
+    }
+
+    private fun cleanupCache() {
+        val currentTime = System.currentTimeMillis()
+        val iterator = elementCache.entries.iterator()
+        while (iterator.hasNext()) {
+            if (iterator.next().value.second < currentTime) {
+                iterator.remove()
+            }
+        }
     }
 }
