@@ -17,3 +17,4 @@ Thumbs.db
 # Secrets
 .env
 release/*.apk
+!release/SpeedOverlay-v1.3-release.apk
