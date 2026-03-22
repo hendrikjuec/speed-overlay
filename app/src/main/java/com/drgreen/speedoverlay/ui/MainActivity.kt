@@ -31,15 +31,21 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
+import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
+import javax.inject.Inject
 
+/**
+ * Der Haupteinstiegspunkt der App für Einstellungen und Service-Steuerung.
+ */
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity(), SettingsManager.OnSettingsChangedListener {
 
     private companion object {
         val LANGUAGES = listOf("en", "de", "es", "fr", "it")
     }
 
-    private val settings by lazy { SettingsManager(this) }
+    @Inject lateinit var settings: SettingsManager
     private val permissionManager by lazy { PermissionManager(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,7 +75,6 @@ class MainActivity : AppCompatActivity(), SettingsManager.OnSettingsChangedListe
 
     private fun updateAudioSwitchState() {
         val switchAudio = findViewById<MaterialSwitch>(R.id.switch_audio)
-        // Wenn temporär stummgeschaltet, Schalter visuell auf AUS, sonst nach Haupteinstellung
         switchAudio?.isChecked = settings.isAudioWarningEnabled && !settings.isAudioMutedTemporary
     }
 
@@ -106,11 +111,10 @@ class MainActivity : AppCompatActivity(), SettingsManager.OnSettingsChangedListe
         btnDevice.setOnClickListener { showDeviceSelectionDialog(it as Button) }
         updateDeviceButtonText(btnDevice)
 
-        // Audio Switch initialisieren
         updateAudioSwitchState()
         findViewById<MaterialSwitch>(R.id.switch_audio)?.setOnCheckedChangeListener { _, checked ->
             settings.isAudioWarningEnabled = checked
-            if (checked) settings.isAudioMutedTemporary = false // Reset Mute wenn manuell aktiviert
+            if (checked) settings.isAudioMutedTemporary = false
         }
 
         bindSwitch(R.id.switch_unit, settings.useMph) { settings.useMph = it }

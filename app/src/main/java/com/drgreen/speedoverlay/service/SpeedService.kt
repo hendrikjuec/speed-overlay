@@ -40,24 +40,33 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.UUID
+import javax.inject.Inject
 import kotlin.math.abs
 
+/**
+ * Der Kern-Service, der GPS-Daten verarbeitet und das Overlay steuert.
+ * Nutzt Hilt für Dependency Injection.
+ */
+@AndroidEntryPoint
 class SpeedService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
-    private lateinit var settingsManager: SettingsManager
-    private lateinit var overlayManager: OverlayManager
-    private lateinit var hardwareHelper: HardwareHelper
-    private lateinit var motionDetector: MotionDetector
-    private lateinit var logManager: LogManager
 
+    @Inject lateinit var settingsManager: SettingsManager
+    @Inject lateinit var hardwareHelper: HardwareHelper
+    @Inject lateinit var motionDetector: MotionDetector
+    @Inject lateinit var logManager: LogManager
+    @Inject lateinit var speedRepository: SpeedRepository
+
+    private lateinit var overlayManager: OverlayManager
     private var toneGenerator: ToneGenerator? = null
 
     private var currentLimit: Int? = null
@@ -65,7 +74,6 @@ class SpeedService : Service() {
     private var isCurrentlySpeeding = false
 
     private val speedProcessor = SpeedProcessor()
-    private val speedRepository = SpeedRepository()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var lastApiCallTime = 0L
@@ -106,10 +114,6 @@ class SpeedService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        settingsManager = SettingsManager(this)
-        hardwareHelper = HardwareHelper(this)
-        motionDetector = MotionDetector(this)
-        logManager = LogManager(this)
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
 
         overlayManager = OverlayManager(this, settingsManager) {
@@ -289,7 +293,7 @@ class SpeedService : Service() {
             if (time - lastSpeedingTime > (Config.LOG_COOLDOWN_SECONDS * 1000L)) {
                 finishLog(location)
             } else {
-                updateLog(speed) // We keep logging during cooldown for avg calculation
+                updateLog(speed)
             }
         }
     }
@@ -355,10 +359,5 @@ class SpeedService : Service() {
         unregisterReceiver(batteryReceiver)
         if (::fusedLocationClient.isInitialized) fusedLocationClient.removeLocationUpdates(locationCallback)
         speedProcessor.clearHistory()
-
-        if (isLoggingActive) {
-            // Optional: Close active log on service destroy
-            // last known location is not available here easily, so we skip or use startLoc
-        }
     }
 }
