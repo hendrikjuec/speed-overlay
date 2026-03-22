@@ -9,17 +9,11 @@ plugins {
     id 'jacoco'
     id 'com.google.devtools.ksp'
     id 'com.google.dagger.hilt.android'
-    id 'com.google.gms.google-services' apply false
-    id 'com.google.firebase.crashlytics' apply false
-}
-
-kotlin {
-    jvmToolchain(21)
 }
 
 android {
     namespace 'com.drgreen.speedoverlay'
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.drgreen.speedoverlay"
@@ -101,11 +95,6 @@ dependencies {
     // Google Play Billing (Monetization)
     implementation "com.android.billingclient:billing-ktx:7.0.0"
 
-    // Firebase (Crashlytics & Analytics)
-    implementation platform('com.google.firebase:firebase-bom:33.9.0')
-    implementation 'com.google.firebase:firebase-crashlytics-ktx'
-    implementation 'com.google.firebase:firebase-analytics-ktx'
-
     // Testing
     testImplementation 'junit:junit:4.13.2'
     testImplementation "org.robolectric:robolectric:4.14.1"
@@ -135,12 +124,12 @@ tasks.register('jacocoTestReport', JacocoReport) {
     }
 
     def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*', '**/*Test*.*', 'android/**/*.*']
-    def debugTree = fileTree(dir: "${project.buildDir}/tmp/kotlin-classes/debug", excludes: fileFilter)
+    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug", excludes: fileFilter)
     def mainSrc = "${project.projectDir}/src/main/java"
 
     sourceDirectories.setFrom(files([mainSrc]))
     classDirectories.setFrom(files([debugTree]))
-    executionData.setFrom(fileTree(dir: project.buildDir, includes: [
+    executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get().asFile, includes: [
             'jacoco/testDebugUnitTest.exec', 'outputs/code_coverage/debugAndroidTest/connected/*coverage.ec'
     ]))
 }

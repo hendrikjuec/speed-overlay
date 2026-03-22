@@ -221,7 +221,7 @@ class SpeedService : Service() {
 
     private fun updateSpeed(location: Location) {
         val useMph = settingsManager.useMph
-        val speed = speedProcessor.getSmoothedSpeed(location.speed, useMph, motionDetector.isMoving || isLowBatteryMode)
+        val speed = speedProcessor.getSmoothedSpeed(location, useMph, motionDetector.isMoving || isLowBatteryMode)
 
         val speeding = speedProcessor.isSpeeding(speed, currentLimit, settingsManager.tolerance)
 
