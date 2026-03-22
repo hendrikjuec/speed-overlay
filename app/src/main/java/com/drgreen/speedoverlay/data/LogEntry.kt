@@ -4,11 +4,15 @@
 
 package com.drgreen.speedoverlay.data
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
 /**
  * Repräsentiert eine Etappe mit starker Geschwindigkeitsabweichung.
  */
+@Entity(tableName = "log_entries")
 data class LogEntry(
-    val id: String,
+    @PrimaryKey val id: String,
     val startTime: Long,
     val endTime: Long,
     val speedLimit: Int,

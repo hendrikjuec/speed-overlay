@@ -5,56 +5,38 @@
 package com.drgreen.speedoverlay.data
 
 import android.content.Context
-import android.content.SharedPreferences
-import androidx.core.content.edit
 import com.drgreen.speedoverlay.util.Config
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.Flow
 
 /**
- * Verwaltet das Logbuch für Abweichungsetappen und persistiert diese in den SharedPreferences.
+ * Verwaltet das Logbuch für Abweichungsetappen über die Room Database.
  */
 class LogManager(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("speed_overlay_logbook", Context.MODE_PRIVATE)
-    private val gson = Gson()
-
-    companion object {
-        private const val KEY_LOGS = "deviation_logs"
-    }
+    private val logDao = LogDatabase.getDatabase(context).logDao()
 
     /**
      * Speichert einen neuen LogEntry und entfernt ggf. den ältesten Eintrag, wenn das Limit erreicht ist.
      */
-    fun saveLog(entry: LogEntry) {
-        val logs = getAllLogs().toMutableList()
-        logs.add(0, entry) // Neuester Eintrag zuerst
+    suspend fun saveLog(entry: LogEntry) {
+        logDao.insertLog(entry)
 
-        if (logs.size > Config.MAX_LOG_ENTRIES) {
-            logs.removeAt(logs.size - 1)
-        }
-
-        prefs.edit {
-            putString(KEY_LOGS, gson.toJson(logs))
+        val count = logDao.getLogCount()
+        if (count > Config.MAX_LOG_ENTRIES) {
+            logDao.deleteOldestLogs(count - Config.MAX_LOG_ENTRIES)
         }
     }
 
     /**
-     * Gibt alle gespeicherten LogEntries zurück.
+     * Gibt alle gespeicherten LogEntries als reaktiven Flow zurück.
      */
-    fun getAllLogs(): List<LogEntry> {
-        val json = prefs.getString(KEY_LOGS, null) ?: return emptyList()
-        val type = object : TypeToken<List<LogEntry>>() {}.type
-        return try {
-            gson.fromJson(json, type)
-        } catch (e: Exception) {
-            emptyList()
-        }
+    fun getAllLogs(): Flow<List<LogEntry>> {
+        return logDao.getAllLogs()
     }
 
     /**
      * Löscht das komplette Logbuch.
      */
-    fun clearLogs() {
-        prefs.edit { remove(KEY_LOGS) }
+    suspend fun clearLogs() {
+        logDao.clearAllLogs()
     }
 }
