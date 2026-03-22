@@ -4,7 +4,9 @@
 
 package com.drgreen.speedoverlay.logic
 
+import android.location.Location
 import com.drgreen.speedoverlay.util.Config
+import com.drgreen.speedoverlay.util.KalmanFilter
 import java.util.*
 import kotlin.math.roundToInt
 
@@ -19,21 +21,39 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
     }
 
     private val speedHistory = LinkedList<Float>()
+    private val kalmanFilter = KalmanFilter()
 
     /**
      * Smoothes raw GPS speed and converts it to the target unit.
-     * Takes an external motion trigger (e.g. from sensors) into account.
+     * Incorporates Kalman filtering (Point 4) and Sensor Fusion.
      */
-    fun getSmoothedSpeed(rawSpeedMs: Float, useMph: Boolean, isPhysicallyMoving: Boolean = true): Int {
+    fun getSmoothedSpeed(location: Location, useMph: Boolean, isPhysicallyMoving: Boolean = true): Int {
+        // --- 🛡 Sensor Fusion & Stillstand Detection (Point 1) ---
         if (!isPhysicallyMoving) {
             speedHistory.clear()
+            kalmanFilter.reset()
             return 0
         }
 
+        // --- 📡 GPS Accuracy Filter (Point 3) ---
+        // If accuracy is very poor, we don't trust the update
+        if (location.hasAccuracy() && location.accuracy > Config.MIN_LOCATION_ACCURACY_METERS) {
+            // Keep previous history, but don't add this "noisy" value
+            return calculateFinalSpeed(useMph)
+        }
+
+        val rawSpeedMs = location.speed
         val safeRawSpeed = if (rawSpeedMs < Config.JITTER_THRESHOLD_MS) 0f else rawSpeedMs
 
-        updateHistory(safeRawSpeed)
+        // --- 📐 Kalman Filtering (Point 4) ---
+        val kalmanSpeed = kalmanFilter.filter(safeRawSpeed)
 
+        updateHistory(kalmanSpeed)
+
+        return calculateFinalSpeed(useMph)
+    }
+
+    private fun calculateFinalSpeed(useMph: Boolean): Int {
         if (speedHistory.all { it == 0f }) {
             return 0
         }
@@ -50,7 +70,6 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
 
     /**
      * Checks if current speed exceeds limit plus tolerance.
-     * Returns false if limit is 0 (unlimited) or -1 (variable).
      */
     fun isSpeeding(currentSpeed: Int, limit: Int?, tolerance: Int): Boolean {
         if (limit == null || limit <= 0) return false
@@ -59,6 +78,7 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
 
     fun clearHistory() {
         speedHistory.clear()
+        kalmanFilter.reset()
     }
 
     private fun updateHistory(speed: Float) {

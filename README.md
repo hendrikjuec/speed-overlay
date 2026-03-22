@@ -1,29 +1,29 @@
-# Speed Overlay Pro (v1.2)
+# Speed Overlay Pro (v1.3)
 
 Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtzeit-Tempolimits aus OpenStreetMap (OSM) mit deiner aktuellen GPS-Geschwindigkeit kombiniert.
 
-## ✨ Hauptmerkmale (v1.2)
+## ✨ Hauptmerkmale (v1.3)
 
 ### 🧠 Intelligente Datenverarbeitung
 - **Predictive Pre-fetching:** Dynamischer Suchradius (bis zu 600m), der sich linear mit deiner Geschwindigkeit skaliert. Sieht bis zu 12 Sekunden in die Zukunft voraus.
-- **Smart Road Filtering:** Gewichtet Straßentypen (z.B. Autobahn vs. Wohngebiet) basierend auf der aktuellen Geschwindigkeit, um Fehl-Anzeigen auf Parallelstraßen zu vermeiden.
-- **Junction Mode:** Erhöhte Sensitivität an Kreuzungen (< 25 km/h), um Abbiegevorgänge zu antizipieren und das neue Limit sofort zu erfassen.
+- **Smart Road Filtering:** Fortgeschrittenes Scoring-Modell berücksichtigt Distanz, Fahrtrichtung (Heading) und Straßentyp, um Fehl-Anzeigen auf Parallelstraßen zu vermeiden.
+- **Junction Mode:** Erhöhte Sensitivität an Kreuzungen (< 25 km/h) mit erweiterter Richtungstoleranz.
 - **Offline Resilience:** Lokaler Cache für bis zu 100 Straßen-Segmente überbrückt Funklöcher von bis zu 10 Minuten.
 
-### 📓 Automatisches Logbuch (Neu in v1.2)
-- **Abweichungsetappen:** Automatische Aufzeichnung von Fahrten, bei denen das Tempolimit signifikant überschritten wurde (> 15 km/h).
-- **Detaillierte Analyse:** Erfassung von Start/Endzeitpunkt, GPS-Koordinaten, Maximal- und Durchschnittsgeschwindigkeit pro Etappe.
-- **Smarte Finalisierung:** Intelligente Cooldown-Logik (5s) erkennt das Ende einer Etappe automatisch.
-- **Effiziente Persistenz:** Speichert bis zu 50 Etappen lokal im JSON-Format.
+### ⚡ Stillstand-Präzision (Neu in v1.3)
+- **Kalman-Filter:** Mathematische Glättung der GPS-Geschwindigkeit zur Eliminierung von Rauschen und Sprüngen.
+- **Sensor-Fusion:** Kombiniert Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand.
+- **Accuracy Filtering:** Ignoriert GPS-Fixes mit schlechter Genauigkeit (> 25m), um "Wandern" in Häuserschluchten zu verhindern.
 
-### ⚡ Performance & Akku
-- **Adaptive Battery Saver:** Drosselt GPS-Intervalle und pausiert Sensoren bei niedrigem Akkustand (< 20%) automatisch (einstellbar).
-- **Sensor-Fusion:** Nutzt Beschleunigungssensor und Gyroskop für eine absolut stabile 0 km/h Anzeige im Stillstand (kein GPS-Wandern).
+### 📓 Automatisches Logbuch
+- **Abweichungsetappen:** Automatische Aufzeichnung von Fahrten, bei denen das Tempolimit signifikant überschritten wurde (> 15 km/h).
+- **In-App Analyse:** Neues UI-Modul zum Einsehen und Verwalten der letzten 50 Etappen (Dauer, Max-Speed, Ø-Speed).
+- **Smarte Finalisierung:** Intelligente Cooldown-Logik erkennt das Ende einer Etappe automatisch.
 
 ### 🛡 Sicherheit & Interaktion
-- **Zusatzschilder:** Anzeige von Gefahrenstellen, Schulzonen, unbegrenzten Abschnitten und variablen Schilderbrücken.
-- **Interaktives Overlay:** Ton-Status Anzeige und Mute per Long-Click mit visuellem Feedback (Flash).
-- **Autostart:** Startet automatisch bei Bluetooth-Verbindung oder Stromverbindung (ideal für Head-Units).
+- **Zusatzschilder:** Anzeige von Gefahrenstellen, Schulzonen und variablen Schilderbrücken.
+- **Interaktives Overlay:** Ton-Status Anzeige und Mute per Long-Click.
+- **Mehrsprachig:** Unterstützung für DE, EN, ES, FR, IT (dynamisch umschaltbar).
 
 ## 🚀 Installation & Start
 1. App öffnen und Berechtigungen (Standort, Overlay) erteilen.
@@ -31,7 +31,7 @@ Ein hochpräziser, schwebender Geschwindigkeitsassistent für Android, der Echtz
 3. Auf "Start Service" tippen.
 
 ## 🧪 Tests ausführen
-Die Core-Logik ist durch Unit-Tests in `SpeedProcessorTest`, `SpeedRepositoryTest` und `AlgorithmusTest` abgesichert:
+Umfangreiche Unit-Tests für Logik und Datenhaltung:
 ```bash
 ./gradlew test
 ```

@@ -6,15 +6,23 @@ package com.drgreen.speedoverlay.util
 
 object Config {
     // Speed Processing
-    const val SMOOTHING_WINDOW = 2
-    const val JITTER_THRESHOLD_MS = 1.2f
+    const val SMOOTHING_WINDOW = 3
+    const val JITTER_THRESHOLD_MS = 0.8f // Etwas niedriger durch Kalman-Filter
     const val MIN_DISPLAY_SPEED = 0.5f
     const val MAX_PLAUSIBLE_ACCEL_MS2 = 15f
 
-    // Sensor Fusion
+    // --- 📡 GPS Filter (Punkt 3) ---
+    const val MIN_LOCATION_ACCURACY_METERS = 25.0f // Fixes mit schlechterer Genauigkeit ignorieren
+    const val ACCURACY_SPEED_THRESHOLD_MULT = 1.5f // Puffer für Genauigkeit vs. Distanz
+
+    // --- 📐 Kalman Filter (Punkt 4) ---
+    const val KALMAN_PROCESS_NOISE = 0.12f // Wie sehr vertrauen wir der Modell-Vorhersage
+    const val KALMAN_MEASUREMENT_NOISE = 0.8f // Wie sehr vertrauen wir den GPS-Daten (Rauschen)
+
+    // Sensor Fusion (Punkt 1)
     const val ACCELERATION_THRESHOLD = 0.5f // m/s^2 über Erdbeschleunigung
     const val GYRO_THRESHOLD = 0.1f // rad/s Rotation
-    const val SENSOR_STILLSTAND_DELAY_MS = 2000L // Wie lange Sensoren "still" sein müssen
+    const val SENSOR_STILLSTAND_DELAY_MS = 1800L // Wie lange Sensoren "still" sein müssen
 
     // API & Repository (Predictive Pre-fetching)
     const val OVERPASS_BASE_URL = "https://overpass-api.de/api/"
