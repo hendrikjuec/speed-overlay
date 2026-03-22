@@ -11,6 +11,8 @@ import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -27,7 +29,8 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
- * Manages the floating overlay UI using Jetpack Compose.
+ * Verwaltet das schwebende Overlay-Fenster unter Verwendung von Jetpack Compose.
+ * Nutzt reaktive Flows von SettingsManager für sofortige UI-Updates bei Einstellungsänderungen.
  */
 class OverlayManager(
     private val context: Context,
@@ -41,7 +44,7 @@ class OverlayManager(
 
     private val overlayState = mutableStateOf<OverlayState?>(null)
 
-    // Lifecycle requirements for ComposeView in a Service
+    // Lifecycle-Anforderungen für die Nutzung von ComposeView in einem Service
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val viewModelStore = ViewModelStore()
@@ -53,23 +56,28 @@ class OverlayManager(
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
+    /** Erstellt und zeigt das Overlay-Fenster an. */
     @SuppressLint("ClickableViewAccessibility")
     fun show() {
         if (composeView != null) return
 
         composeView = ComposeView(context).apply {
-            // Set required owners for Compose
+            // Notwendige Owner für Compose setzen
             setViewTreeLifecycleOwner(this@OverlayManager)
             setViewTreeViewModelStoreOwner(this@OverlayManager)
             setViewTreeSavedStateRegistryOwner(this@OverlayManager)
 
             setContent {
+                val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
+                val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
+                val color by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
+
                 overlayState.value?.let { state ->
                     OverlayScreen(
                         state = state,
-                        scale = settings.overlaySize,
-                        alpha = settings.overlayAlpha,
-                        textColor = settings.overlayTextColor
+                        scale = size,
+                        alpha = alpha,
+                        textColor = color
                     )
                 }
             }
@@ -87,24 +95,26 @@ class OverlayManager(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 100
+            x = settings.overlayX
+            y = settings.overlayY
         }
 
-        composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, onLongClick))
+        composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         windowManager.addView(composeView, params)
     }
 
+    /** Aktualisiert die anzuzeigenden Daten (Geschwindigkeit, Limit etc.). */
     fun updateState(state: OverlayState) {
         overlayState.value = state
     }
 
     fun flash() {
-        // Compose handles animations internally in OverlayScreen based on state changes
+        // Compose handhabt Animationen intern in OverlayScreen basierend auf State-Änderungen
     }
 
+    /** Entfernt das Overlay-Fenster vom Bildschirm. */
     fun hide() {
         composeView?.let {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
@@ -112,5 +122,10 @@ class OverlayManager(
             composeView = null
         }
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+    }
+
+    /** Gibt Ressourcen frei. */
+    fun release() {
+        // No-op, da Flows über den Compose-Lifecycle verwaltet werden.
     }
 }

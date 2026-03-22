@@ -12,6 +12,7 @@ data class OverlayState(
     val speedLimit: Int?, // >0: km/h, 0: unlimited, -1: variable, null: unknown
     val unit: String,
     val isSpeeding: Boolean,
+    val isConfidenceHigh: Boolean = false,
     val showHazard: Boolean = false,
     val showCamera: Boolean = false,
     val isAudioMuted: Boolean = false

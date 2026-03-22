@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -62,12 +62,27 @@ fun OverlayScreen(
         }
     )
 
+    // Root container that reports its scaled size to the WindowManager
     Box(
         modifier = Modifier
-            .graphicsLayer {
-                scaleX = scale * pulseScale
-                scaleY = scale * pulseScale
-                this.alpha = alpha
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+
+                // Add a small buffer (1.1x) for the pulse animation to prevent clipping
+                val pulseBuffer = 1.1f
+                val scaledWidth = (placeable.width * scale * pulseBuffer).toInt()
+                val scaledHeight = (placeable.height * scale * pulseBuffer).toInt()
+
+                layout(scaledWidth, scaledHeight) {
+                    placeable.placeRelativeWithLayer(
+                        x = (scaledWidth - placeable.width) / 2,
+                        y = (scaledHeight - placeable.height) / 2
+                    ) {
+                        this.scaleX = scale * pulseScale
+                        this.scaleY = scale * pulseScale
+                        this.alpha = alpha
+                    }
+                }
             }
             .padding(8.dp)
             .clip(RoundedCornerShape(16.dp))
@@ -112,7 +127,11 @@ fun OverlayScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .border(4.dp, Color.Red, CircleShape)
+                            .border(
+                                width = 4.dp,
+                                color = if (state.isConfidenceHigh) Color.Red else Color.Gray,
+                                shape = CircleShape
+                            )
                     )
                 }
 
@@ -189,6 +208,7 @@ fun OverlayPreview() {
             speedLimit = 100,
             unit = "km/h",
             isSpeeding = true,
+            isConfidenceHigh = true,
             showHazard = true,
             showCamera = true
         )

@@ -14,19 +14,34 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Repository für Geschwindigkeitsbegrenzungen.
+ * Ruft Daten von der Overpass API ab und verwaltet einen Offline-Cache für Ausfallsicherheit.
+ */
 @Singleton
 class SpeedRepository @Inject constructor(
     private val overpassApi: OverpassApi,
     private val osmParser: OsmParser
 ) {
-    // Shared Element cache for offline fallback
+    // Shared Element Cache für Offline-Fallback
     private val elementCache = ConcurrentHashMap<Long, Pair<Element, Long>>()
 
     private var cachedLimit: Int? = null
     private var cachedInfo: List<String> = emptyList()
+    private var cachedConfidence: Boolean = false
     private var cachedLocation: Location? = null
     private var cachedTimestamp: Long = 0L
 
+    /**
+     * Ruft das Tempolimit für die aktuelle Position ab.
+     * Nutzt einen Kurzzeit-Cache für Performance und einen Langzeit-Element-Cache für Offline-Betrieb.
+     *
+     * @param lat Breitengrad
+     * @param lon Längengrad
+     * @param heading Aktuelle Fahrtrichtung in Grad
+     * @param speedKmh Aktuelle Geschwindigkeit in km/h (beeinflusst Suchradius)
+     * @param showCameras Ob Blitzer-Infos mit einbezogen werden sollen
+     */
     suspend fun fetchSpeedLimit(
         lat: Double,
         lon: Double,
@@ -40,11 +55,11 @@ class SpeedRepository @Inject constructor(
             longitude = lon
         }
 
-        // --- Standard Cache Validation (Short term) ---
+        // --- Kurzzeit-Cache Validierung ---
         if (cachedLimit != null &&
             currentTime - cachedTimestamp < Config.CACHE_EXPIRATION_MS &&
             (cachedLocation?.distanceTo(currentLocation) ?: Float.MAX_VALUE) < Config.CACHE_DISTANCE_THRESHOLD_METERS) {
-            return@withContext SpeedResult.Success(cachedLimit, cachedInfo)
+            return@withContext SpeedResult.Success(cachedLimit, cachedInfo, cachedConfidence)
         }
 
         return@withContext try {
@@ -55,7 +70,7 @@ class SpeedRepository @Inject constructor(
             val query = "[out:json];way(around:$dynamicRadius, $lat, $lon)[highway];out tags geom;"
             val response = overpassApi.getSpeedLimit(query)
 
-            // Update Offline Cache with all fetched elements
+            // Offline-Cache mit allen abgerufenen Elementen aktualisieren
             response.elements.forEach { element ->
                 elementCache[element.id] = element to (currentTime + Config.OFFLINE_CACHE_EXPIRATION_MS)
             }
@@ -63,7 +78,7 @@ class SpeedRepository @Inject constructor(
 
             processBestMatch(response.elements, heading, speedKmh, showCameras, currentLocation)
         } catch (e: Exception) {
-            // --- 🛡 Offline Resilience Strategy: Fallback to Offline Cache ---
+            // --- 🛡 Offline Resilienz-Strategie: Fallback auf Offline-Cache ---
             val offlineElements = elementCache.values
                 .filter { it.second > currentTime }
                 .map { it.first }
@@ -71,7 +86,7 @@ class SpeedRepository @Inject constructor(
             if (offlineElements.isNotEmpty()) {
                 processBestMatch(offlineElements, heading, speedKmh, showCameras, currentLocation)
             } else {
-                SpeedResult.Error(e.message ?: "Network error and no offline cache available")
+                SpeedResult.Error(e.message ?: "Netzwerkfehler und kein Offline-Cache verfügbar")
             }
         }
     }
@@ -83,20 +98,26 @@ class SpeedRepository @Inject constructor(
         showCameras: Boolean,
         currentLocation: Location
     ): SpeedResult<Int?> {
-        if (elements.isEmpty()) return SpeedResult.Success(null, emptyList())
+        if (elements.isEmpty()) return SpeedResult.Success(null, emptyList(), false)
 
         // --- 🧠 Smart Road Filtering & Scoring ---
+        // Wählt die wahrscheinlichste Straße basierend auf Richtung und Distanz aus.
         val bestElement = elements.maxByOrNull { element ->
             calculateScore(element, heading, speedKmh, currentLocation)
         } ?: elements.first()
 
-        val limit = osmParser.parseSpeedLimit(bestElement.tags)
+        val parseResult = osmParser.parseSpeedLimit(bestElement.tags)
         val additionalInfo = osmParser.parseAdditionalInfo(bestElement.tags, showCameras)
 
-        val result = SpeedResult.Success(limit, additionalInfo)
+        val result = SpeedResult.Success(
+            data = parseResult.limit,
+            additionalInfo = additionalInfo,
+            isConfidenceHigh = parseResult.isConfidenceHigh
+        )
 
         cachedLimit = result.data
         cachedInfo = result.additionalInfo
+        cachedConfidence = result.isConfidenceHigh
         cachedLocation = currentLocation
         cachedTimestamp = System.currentTimeMillis()
 
@@ -106,12 +127,12 @@ class SpeedRepository @Inject constructor(
     private fun calculateScore(element: Element, carHeading: Float?, speedKmh: Float, carLoc: Location): Double {
         var score = 0.0
 
-        // 1. Distance Score (0.0 to 1.0)
+        // 1. Distanz-Score (0.0 bis 1.0)
         val minDistance = element.geometry?.minOfOrNull { GeoUtils.distanceToPoint(carLoc.latitude, carLoc.longitude, it) } ?: 100f
         val distanceRatio = (minDistance / Config.MAX_SEARCH_RADIUS_METERS.toFloat()).toDouble().coerceIn(0.0, 1.0)
         score += (1.0 - distanceRatio) * 2.0
 
-        // 2. Heading Match (0.0 to 1.0)
+        // 2. Richtungs-Abgleich (Heading Match)
         if (carHeading != null && element.geometry != null && element.geometry.size >= 2) {
             val wayHeading = GeoUtils.calculateBearing(element.geometry[0], element.geometry.last())
             val diff = GeoUtils.getHeadingDifference(carHeading, wayHeading).toDouble()
@@ -120,11 +141,11 @@ class SpeedRepository @Inject constructor(
                 Config.JUNCTION_HEADING_TOLERANCE_DEG else Config.HEADING_TOLERANCE_DEG
 
             if (diff <= tolerance) {
-                score += 3.0 // Strong signal if heading matches
+                score += 3.0 // Starkes Signal, wenn die Richtung übereinstimmt
             }
         }
 
-        // 3. Road Type weighting based on speed
+        // 3. Straßentyp-Gewichtung basierend auf Geschwindigkeit
         val type = element.tags?.get("highway") ?: ""
         score += calculateTypeScore(type, speedKmh)
 

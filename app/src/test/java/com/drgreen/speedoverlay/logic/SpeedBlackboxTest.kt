@@ -26,7 +26,7 @@ class SpeedBlackboxTest {
             mapOf("maxspeed" to "DE:rural") to 100,
             mapOf("maxspeed" to "DE:motorway") to 0,
             mapOf("maxspeed" to "walk") to 5,
-            mapOf("highway" to "living_street") to 7,
+            mapOf("highway" to "living_street") to 7, // DE default is 7
             mapOf("maxspeed" to "none") to 0,
             mapOf("maxspeed" to "signals") to -1,
             mapOf("maxspeed" to "") to null,
@@ -34,7 +34,8 @@ class SpeedBlackboxTest {
         )
 
         testCases.forEach { (input, expected) ->
-            assertEquals("Fehler bei Input: $input", expected, parser.parseSpeedLimit(input))
+            val result = parser.parseSpeedLimit(input)
+            assertEquals("Fehler bei Input: $input", expected, result.limit)
         }
     }
 

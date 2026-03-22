@@ -5,142 +5,173 @@
 package com.drgreen.speedoverlay.data
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.content.edit
 import androidx.core.os.LocaleListCompat
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
-class SettingsManager(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("speed_overlay_prefs", Context.MODE_PRIVATE)
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-    interface OnSettingsChangedListener {
-        fun onSettingChanged(key: String)
-    }
+/**
+ * Zentrale Verwaltung der Anwendungseinstellungen.
+ * Nutzt Jetpack DataStore für Persistenz und StateFlows für reaktive UI-Updates.
+ * Synchronisiert die Spracheinstellung mit AppCompatDelegate für konsistente Lokalisierung.
+ */
+class SettingsManager(private val context: Context) {
 
-    private val listeners = mutableListOf<OnSettingsChangedListener>()
+    private val dataStore = context.dataStore
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun addListener(listener: OnSettingsChangedListener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener)
-        }
-    }
-
-    fun removeListener(listener: OnSettingsChangedListener) {
-        listeners.remove(listener)
-    }
-
-    private fun notifyListeners(key: String) {
-        val currentListeners = synchronized(listeners) { listeners.toList() }
-        currentListeners.forEach { it.onSettingChanged(key) }
-    }
+    // StateFlow als Single Source of Truth für synchronen und reaktiven Zugriff
+    val prefsState = dataStore.data.stateIn(
+        scope = scope,
+        started = SharingStarted.Eagerly,
+        initialValue = runBlocking { dataStore.data.firstOrNull() ?: emptyPreferences() }
+    )
 
     companion object {
-        const val KEY_TOLERANCE = "tolerance"
-        const val DEFAULT_TOLERANCE = 5
-        const val KEY_AUTOSTART_BT = "autostart_bt"
-        const val KEY_AUTOSTART_BT_DEVICE = "autostart_bt_device"
-        const val KEY_AUTOSTART_POWER = "autostart_power"
-        const val KEY_AUDIO_WARNING = "audio_warning"
-        const val KEY_AUDIO_MUTED_TEMPORARY = "audio_muted_temporary"
-        const val KEY_UNIT_MPH = "unit_mph"
-        const val KEY_OVERLAY_SIZE = "overlay_size"
-        const val KEY_OVERLAY_ALPHA = "overlay_alpha"
-        const val KEY_OVERLAY_TEXT_COLOR = "overlay_text_color"
-        const val KEY_DISCLAIMER_ACCEPTED = "disclaimer_accepted"
-        const val KEY_SHOW_SPEED_CAMERAS = "show_speed_cameras"
-        const val KEY_BATTERY_OPTIMIZATION = "battery_optimization"
+        val TOLERANCE = intPreferencesKey("tolerance")
+        val AUTOSTART_BT = booleanPreferencesKey("autostart_bt")
+        val AUTOSTART_BT_DEVICE = stringPreferencesKey("autostart_bt_device")
+        val AUTOSTART_POWER = booleanPreferencesKey("autostart_power")
+        val AUDIO_WARNING = booleanPreferencesKey("audio_warning")
+        val AUDIO_MUTED_TEMPORARY = booleanPreferencesKey("audio_muted_temporary")
+        val UNIT_MPH = booleanPreferencesKey("unit_mph")
+        val OVERLAY_SIZE = floatPreferencesKey("overlay_size")
+        val OVERLAY_ALPHA = floatPreferencesKey("overlay_alpha")
+        val OVERLAY_TEXT_COLOR = intPreferencesKey("overlay_text_color")
+        val DISCLAIMER_ACCEPTED = booleanPreferencesKey("disclaimer_accepted")
+        val SHOW_SPEED_CAMERAS = booleanPreferencesKey("show_speed_cameras")
+        val BATTERY_OPTIMIZATION = booleanPreferencesKey("battery_optimization")
+        val OVERLAY_X = intPreferencesKey("overlay_x")
+        val OVERLAY_Y = intPreferencesKey("overlay_y")
+        val DARK_MODE = intPreferencesKey("dark_mode")
+        val LANGUAGE = stringPreferencesKey("language")
 
-        const val KEY_DARK_MODE = "dark_mode"
-        const val KEY_LANGUAGE = "language"
+        const val DEFAULT_TOLERANCE = 5
     }
 
+    // --- Reaktive Flows für Compose ---
+    val toleranceFlow = prefsState.map { it[TOLERANCE] ?: DEFAULT_TOLERANCE }.distinctUntilChanged()
+    val useMphFlow = prefsState.map { it[UNIT_MPH] ?: false }.distinctUntilChanged()
+    val audioWarningFlow = prefsState.map { it[AUDIO_WARNING] ?: true }.distinctUntilChanged()
+    val autostartBtFlow = prefsState.map { it[AUTOSTART_BT] ?: false }.distinctUntilChanged()
+    val autostartBtDeviceFlow = prefsState.map { it[AUTOSTART_BT_DEVICE] }.distinctUntilChanged()
+    val autostartPowerFlow = prefsState.map { it[AUTOSTART_POWER] ?: false }.distinctUntilChanged()
+    val overlaySizeFlow = prefsState.map { it[OVERLAY_SIZE] ?: 1.0f }.distinctUntilChanged()
+    val overlayAlphaFlow = prefsState.map { it[OVERLAY_ALPHA] ?: 1.0f }.distinctUntilChanged()
+    val overlayTextColorFlow = prefsState.map { it[OVERLAY_TEXT_COLOR] ?: Color.WHITE }.distinctUntilChanged()
+    val darkModeFlow = prefsState.map { it[DARK_MODE] ?: 0 }.distinctUntilChanged()
+
+    val languageFlow = prefsState.map {
+        // Wir priorisieren die aktuell in AppCompat gesetzte Sprache, um Race Conditions bei Activity-Recreates zu vermeiden
+        AppCompatDelegate.getApplicationLocales().get(0)?.language ?: it[LANGUAGE] ?: getDefaultLanguage()
+    }.distinctUntilChanged()
+
+    // --- Synchroner Zugriff (Properties) ---
+
     var tolerance: Int
-        get() = prefs.getInt(KEY_TOLERANCE, DEFAULT_TOLERANCE)
-        set(value) { prefs.edit { putInt(KEY_TOLERANCE, value) }; notifyListeners(KEY_TOLERANCE) }
+        get() = prefsState.value[TOLERANCE] ?: DEFAULT_TOLERANCE
+        set(value) = update(TOLERANCE, value)
 
     var isAutostartBtEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUTOSTART_BT, false)
-        set(value) { prefs.edit { putBoolean(KEY_AUTOSTART_BT, value) }; notifyListeners(KEY_AUTOSTART_BT) }
-
-    var isAutostartPowerEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUTOSTART_POWER, false)
-        set(value) { prefs.edit { putBoolean(KEY_AUTOSTART_POWER, value) }; notifyListeners(KEY_AUTOSTART_POWER) }
+        get() = prefsState.value[AUTOSTART_BT] ?: false
+        set(value) = update(AUTOSTART_BT, value)
 
     var autostartBtDeviceAddress: String?
-        get() = prefs.getString(KEY_AUTOSTART_BT_DEVICE, null)
-        set(value) { prefs.edit { putString(KEY_AUTOSTART_BT_DEVICE, value) }; notifyListeners(KEY_AUTOSTART_BT_DEVICE) }
+        get() = prefsState.value[AUTOSTART_BT_DEVICE]
+        set(value) = updateNullable(AUTOSTART_BT_DEVICE, value)
+
+    var isAutostartPowerEnabled: Boolean
+        get() = prefsState.value[AUTOSTART_POWER] ?: false
+        set(value) = update(AUTOSTART_POWER, value)
 
     var isAudioWarningEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUDIO_WARNING, true)
-        set(value) { prefs.edit { putBoolean(KEY_AUDIO_WARNING, value) }; notifyListeners(KEY_AUDIO_WARNING) }
+        get() = prefsState.value[AUDIO_WARNING] ?: true
+        set(value) = update(AUDIO_WARNING, value)
 
     var isAudioMutedTemporary: Boolean
-        get() = prefs.getBoolean(KEY_AUDIO_MUTED_TEMPORARY, false)
-        set(value) {
-            prefs.edit { putBoolean(KEY_AUDIO_MUTED_TEMPORARY, value) }
-            notifyListeners(KEY_AUDIO_MUTED_TEMPORARY)
-        }
+        get() = prefsState.value[AUDIO_MUTED_TEMPORARY] ?: false
+        set(value) = update(AUDIO_MUTED_TEMPORARY, value)
 
     var useMph: Boolean
-        get() = prefs.getBoolean(KEY_UNIT_MPH, false)
-        set(value) { prefs.edit { putBoolean(KEY_UNIT_MPH, value) }; notifyListeners(KEY_UNIT_MPH) }
+        get() = prefsState.value[UNIT_MPH] ?: false
+        set(value) = update(UNIT_MPH, value)
 
     var overlaySize: Float
-        get() = prefs.getFloat(KEY_OVERLAY_SIZE, 1.0f)
-        set(value) { prefs.edit { putFloat(KEY_OVERLAY_SIZE, value) }; notifyListeners(KEY_OVERLAY_SIZE) }
+        get() = prefsState.value[OVERLAY_SIZE] ?: 1.0f
+        set(value) = update(OVERLAY_SIZE, value)
 
     var overlayAlpha: Float
-        get() = prefs.getFloat(KEY_OVERLAY_ALPHA, 1.0f)
-        set(value) { prefs.edit { putFloat(KEY_OVERLAY_ALPHA, value) }; notifyListeners(KEY_OVERLAY_ALPHA) }
+        get() = prefsState.value[OVERLAY_ALPHA] ?: 1.0f
+        set(value) = update(OVERLAY_ALPHA, value)
 
     var overlayTextColor: Int
-        get() = prefs.getInt(KEY_OVERLAY_TEXT_COLOR, Color.WHITE)
-        set(value) { prefs.edit { putInt(KEY_OVERLAY_TEXT_COLOR, value) }; notifyListeners(KEY_OVERLAY_TEXT_COLOR) }
+        get() = prefsState.value[OVERLAY_TEXT_COLOR] ?: Color.WHITE
+        set(value) = update(OVERLAY_TEXT_COLOR, value)
 
     var isDisclaimerAccepted: Boolean
-        get() = prefs.getBoolean(KEY_DISCLAIMER_ACCEPTED, false)
-        set(value) = prefs.edit { putBoolean(KEY_DISCLAIMER_ACCEPTED, value) }
+        get() = prefsState.value[DISCLAIMER_ACCEPTED] ?: false
+        set(value) = update(DISCLAIMER_ACCEPTED, value)
 
     var showSpeedCameras: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_SPEED_CAMERAS, false)
-        set(value) { prefs.edit { putBoolean(KEY_SHOW_SPEED_CAMERAS, value) }; notifyListeners(KEY_SHOW_SPEED_CAMERAS) }
+        get() = prefsState.value[SHOW_SPEED_CAMERAS] ?: false
+        set(value) = update(SHOW_SPEED_CAMERAS, value)
 
     var isBatteryOptimizationEnabled: Boolean
-        get() = prefs.getBoolean(KEY_BATTERY_OPTIMIZATION, true)
-        set(value) { prefs.edit { putBoolean(KEY_BATTERY_OPTIMIZATION, value) }; notifyListeners(KEY_BATTERY_OPTIMIZATION) }
+        get() = prefsState.value[BATTERY_OPTIMIZATION] ?: true
+        set(value) = update(BATTERY_OPTIMIZATION, value)
+
+    var overlayX: Int
+        get() = prefsState.value[OVERLAY_X] ?: 100
+        set(value) = update(OVERLAY_X, value)
+
+    var overlayY: Int
+        get() = prefsState.value[OVERLAY_Y] ?: 200
+        set(value) = update(OVERLAY_Y, value)
 
     var darkMode: Int
-        get() = prefs.getInt(KEY_DARK_MODE, 0)
+        get() = prefsState.value[DARK_MODE] ?: 0
         set(value) {
-            if (darkMode != value) {
-                prefs.edit { putInt(KEY_DARK_MODE, value) }
-                applyDarkMode(value)
-                notifyListeners(KEY_DARK_MODE)
-            }
+            update(DARK_MODE, value)
+            applyDarkMode(value)
         }
 
     var language: String
-        get() {
-            val systemLanguage = Locale.getDefault().language
-            val defaultLang = when (systemLanguage) {
-                "de" -> "de"; "es" -> "es"; "fr" -> "fr"; "it" -> "it"
-                else -> "en"
-            }
-            return prefs.getString(KEY_LANGUAGE, defaultLang) ?: defaultLang
-        }
+        get() = AppCompatDelegate.getApplicationLocales().get(0)?.language ?: prefsState.value[LANGUAGE] ?: getDefaultLanguage()
         set(value) {
-            if (prefs.getString(KEY_LANGUAGE, null) != value) {
-                prefs.edit { putString(KEY_LANGUAGE, value) }
-                applyLanguage(value)
-                notifyListeners(KEY_LANGUAGE)
-            }
+            update(LANGUAGE, value)
+            applyLanguage(value)
         }
+
+    private fun <T> update(key: Preferences.Key<T>, value: T) {
+        scope.launch { dataStore.edit { it[key] = value } }
+    }
+
+    private fun <T> updateNullable(key: Preferences.Key<T>, value: T?) {
+        scope.launch { dataStore.edit { if (value == null) it.remove(key) else it[key] = value } }
+    }
 
     fun applySettings() {
         applyDarkMode(darkMode)
         applyLanguage(language)
+    }
+
+    private fun getDefaultLanguage(): String {
+        val systemLanguage = Locale.getDefault().language
+        return when (systemLanguage) {
+            "de" -> "de"; "es" -> "es"; "fr" -> "fr"; "it" -> "it"
+            else -> "en"
+        }
     }
 
     private fun applyDarkMode(mode: Int) {
@@ -156,9 +187,14 @@ class SettingsManager(context: Context) {
 
     private fun applyLanguage(lang: String) {
         val currentLocales = AppCompatDelegate.getApplicationLocales()
-        val targetLocale = LocaleListCompat.forLanguageTags(lang)
         if (currentLocales.isEmpty || currentLocales.get(0)?.language != lang) {
+            val targetLocale = LocaleListCompat.forLanguageTags(lang)
             AppCompatDelegate.setApplicationLocales(targetLocale)
         }
     }
+
+    // Listener-Support für Abwärtskompatibilität (optional)
+    fun addListener(listener: OnSettingsChangedListener) {}
+    fun removeListener(listener: OnSettingsChangedListener) {}
+    interface OnSettingsChangedListener { fun onSettingChanged(key: String) }
 }

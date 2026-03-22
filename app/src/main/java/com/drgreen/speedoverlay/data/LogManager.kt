@@ -9,13 +9,18 @@ import com.drgreen.speedoverlay.util.Config
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Verwaltet das Logbuch für Abweichungsetappen über die Room Database.
+ * Verwaltet das Logbuch der Anwendung.
+ * Speichert Fahrten mit Geschwindigkeitsüberschreitungen in einer Room-Datenbank.
+ * Stellt sicher, dass das Logbuch die maximale Anzahl an Einträgen (Config.MAX_LOG_ENTRIES) nicht überschreitet.
  */
 class LogManager(context: Context) {
     private val logDao = LogDatabase.getDatabase(context).logDao()
 
     /**
-     * Speichert einen neuen LogEntry und entfernt ggf. den ältesten Eintrag, wenn das Limit erreicht ist.
+     * Speichert einen neuen Log-Eintrag.
+     * Wenn das Limit für Log-Einträge erreicht ist, werden die ältesten Einträge automatisch gelöscht.
+     *
+     * @param entry Das zu speichernde [LogEntry]-Objekt.
      */
     suspend fun saveLog(entry: LogEntry) {
         logDao.insertLog(entry)
@@ -27,14 +32,14 @@ class LogManager(context: Context) {
     }
 
     /**
-     * Gibt alle gespeicherten LogEntries als reaktiven Flow zurück.
+     * Gibt einen Flow aller Log-Einträge zurück, sortiert nach Zeit.
      */
     fun getAllLogs(): Flow<List<LogEntry>> {
         return logDao.getAllLogs()
     }
 
     /**
-     * Löscht das komplette Logbuch.
+     * Löscht alle Einträge aus dem Logbuch unwiderruflich.
      */
     suspend fun clearLogs() {
         logDao.clearAllLogs()

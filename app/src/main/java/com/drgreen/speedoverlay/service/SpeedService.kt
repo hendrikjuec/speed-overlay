@@ -45,6 +45,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -52,7 +53,7 @@ import kotlin.math.abs
 
 /**
  * Der Kern-Service, der GPS-Daten verarbeitet und das Overlay steuert.
- * Nutzt Hilt für Dependency Injection.
+ * Erkennt Ladestatus und nutzt Sensor Fusion für sofortige Stillstandserkennung.
  */
 @AndroidEntryPoint
 class SpeedService : Service() {
@@ -71,7 +72,9 @@ class SpeedService : Service() {
 
     private var currentLimit: Int? = null
     private var currentAdditionalInfo: List<String> = emptyList()
+    private var currentConfidenceHigh = false
     private var isCurrentlySpeeding = false
+    private var lastKnownLocation: Location? = null
 
     private val speedProcessor = SpeedProcessor()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -81,6 +84,8 @@ class SpeedService : Service() {
     private var lastApiSpeedKmh = 0f
 
     private var isLowBatteryMode = false
+    private var isCharging = false
+    private var lastUsedInterval = -1L
 
     // --- 📓 Logbook State ---
     private var isLoggingActive = false
@@ -127,10 +132,42 @@ class SpeedService : Service() {
         motionDetector.start()
 
         registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        initLocationUpdates()
+        initLocationUpdates(Config.LOCATION_UPDATE_INTERVAL_MS)
+        observeMotion()
+    }
+
+    private fun observeMotion() {
+        serviceScope.launch {
+            motionDetector.isMovingFlow.collectLatest { isMoving ->
+                // Wenn wir am Strom hängen, ignorieren wir den Stillstand für die GPS-Drosselung,
+                // aber für die Geschwindigkeitsanzeige (0 km/h) nutzen wir ihn trotzdem.
+                if (!isMoving) {
+                    forceZeroSpeed()
+                }
+            }
+        }
+    }
+
+    private fun forceZeroSpeed() {
+        val useMph = settingsManager.useMph
+        overlayManager.updateState(OverlayState(
+            currentSpeed = 0,
+            speedLimit = currentLimit,
+            unit = if (useMph) "mph" else "km/h",
+            isSpeeding = false,
+            isConfidenceHigh = currentConfidenceHigh,
+            showHazard = currentAdditionalInfo.contains("Gefahr") || currentAdditionalInfo.contains("Schule"),
+            showCamera = currentAdditionalInfo.contains("Blitzer"),
+            isAudioMuted = settingsManager.isAudioMutedTemporary
+        ))
+        speedProcessor.clearHistory()
     }
 
     private fun checkBatteryStatus(intent: Intent) {
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+
         if (!settingsManager.isBatteryOptimizationEnabled) {
             if (isLowBatteryMode) disableBatterySaver()
             return
@@ -139,9 +176,6 @@ class SpeedService : Service() {
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
         val batteryPct = level * 100 / scale.toFloat()
-        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                status == BatteryManager.BATTERY_STATUS_FULL
 
         val shouldBeInLowPower = batteryPct <= Config.BATTERY_LOW_THRESHOLD && !isCharging
 
@@ -155,14 +189,14 @@ class SpeedService : Service() {
     private fun enableBatterySaver() {
         isLowBatteryMode = true
         motionDetector.stop()
-        restartLocationUpdates()
+        restartLocationUpdates(Config.BATTERY_SAVER_GPS_INTERVAL_MS)
         Toast.makeText(this, "Akkusparmodus aktiv: GPS gedrosselt", Toast.LENGTH_SHORT).show()
     }
 
     private fun disableBatterySaver() {
         isLowBatteryMode = false
         motionDetector.start()
-        restartLocationUpdates()
+        restartLocationUpdates(Config.LOCATION_UPDATE_INTERVAL_MS)
     }
 
     private fun createNotificationChannel() {
@@ -170,20 +204,30 @@ class SpeedService : Service() {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "Speed Overlay Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(serviceChannel)
         }
     }
 
     private fun createNotification(): Notification {
-        val stopIntent = Intent(this, SpeedService::class.java).apply { action = STOP_ACTION }
-        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        val stopIntent = Intent(this, SpeedService::class.java).apply {
+            action = STOP_ACTION
+        }
+
+        // requestCode von 0 auf 1 geändert und FLAG_UPDATE_CURRENT hinzugefügt
+        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            })
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
+            .setContentText("Dienst aktiv")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .build()
     }
@@ -195,13 +239,14 @@ class SpeedService : Service() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun initLocationUpdates() {
+    private fun initLocationUpdates(intervalMs: Long) {
+        if (lastUsedInterval == intervalMs) return
+        lastUsedInterval = intervalMs
+
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-        val interval = if (isLowBatteryMode) Config.BATTERY_SAVER_GPS_INTERVAL_MS else Config.LOCATION_UPDATE_INTERVAL_MS
-
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-            .setMinUpdateIntervalMillis(Config.LOCATION_MIN_UPDATE_INTERVAL_MS)
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+            .setMinUpdateIntervalMillis(intervalMs / 2)
             .build()
 
         locationCallback = object : LocationCallback() {
@@ -212,17 +257,37 @@ class SpeedService : Service() {
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
     }
 
-    private fun restartLocationUpdates() {
+    private fun restartLocationUpdates(newInterval: Long) {
         if (::fusedLocationClient.isInitialized) {
             fusedLocationClient.removeLocationUpdates(locationCallback)
-            initLocationUpdates()
+            initLocationUpdates(newInterval)
         }
     }
 
     private fun updateSpeed(location: Location) {
+        lastKnownLocation = location
         val useMph = settingsManager.useMph
-        val speed = speedProcessor.getSmoothedSpeed(location, useMph, motionDetector.isMoving || isLowBatteryMode)
+        val speedKmh = location.speed * 3.6f
 
+        // --- 🔋 Dynamic GPS Interval ---
+        val targetInterval = when {
+            isCharging -> 300L
+            isLowBatteryMode -> Config.BATTERY_SAVER_GPS_INTERVAL_MS
+            else -> when {
+                speedKmh > 100 -> 300L
+                speedKmh > 50 -> 500L
+                speedKmh < 5 -> 2000L
+                else -> 800L
+            }
+        }
+
+        if (abs(targetInterval - lastUsedInterval) > 100) {
+            restartLocationUpdates(targetInterval)
+        }
+
+        // Wir nutzen die Sensoren für die physikalische Bewegungserkennung.
+        // Falls Sensoren fehlen, liefert isMoving immer true.
+        val speed = speedProcessor.getSmoothedSpeed(location, useMph, motionDetector.isMoving)
         val speeding = speedProcessor.isSpeeding(speed, currentLimit, settingsManager.tolerance)
 
         overlayManager.updateState(OverlayState(
@@ -230,6 +295,7 @@ class SpeedService : Service() {
             speedLimit = currentLimit,
             unit = if (useMph) "mph" else "km/h",
             isSpeeding = speeding,
+            isConfidenceHigh = currentConfidenceHigh,
             showHazard = currentAdditionalInfo.contains("Gefahr") || currentAdditionalInfo.contains("Schule"),
             showCamera = currentAdditionalInfo.contains("Blitzer"),
             isAudioMuted = settingsManager.isAudioMutedTemporary
@@ -238,7 +304,6 @@ class SpeedService : Service() {
         handleSpeedingAlerts(speed, speeding)
         handleLogbook(speed, location)
 
-        val speedKmh = location.speed * 3.6f
         val time = System.currentTimeMillis()
         val dist = lastApiLocation?.distanceTo(location) ?: Float.MAX_VALUE
 
@@ -246,6 +311,7 @@ class SpeedService : Service() {
         val isJunctionMode = speedKmh < Config.JUNCTION_SPEED_THRESHOLD_KMH
 
         var dynamicInterval = when {
+            isCharging -> 2000L
             significantSpeedChange -> 1000L
             speedKmh > 100 -> 3500L
             speedKmh > 50 -> 6000L
@@ -253,7 +319,7 @@ class SpeedService : Service() {
             else -> 12000L
         }
 
-        var minDistance = if (significantSpeedChange || isJunctionMode) 10f else Config.API_CALL_MIN_DISTANCE_METERS
+        var minDistance = if (isCharging) 10f else if (significantSpeedChange || isJunctionMode) 10f else Config.API_CALL_MIN_DISTANCE_METERS
 
         if (isLowBatteryMode) {
             dynamicInterval *= 2
@@ -343,6 +409,7 @@ class SpeedService : Service() {
                 is SpeedResult.Success -> {
                     currentLimit = result.data
                     currentAdditionalInfo = result.additionalInfo
+                    currentConfidenceHigh = result.isConfidenceHigh
                 }
                 is SpeedResult.Error -> { }
                 is SpeedResult.Loading -> { }
@@ -355,6 +422,7 @@ class SpeedService : Service() {
         serviceScope.cancel()
         toneGenerator?.release()
         overlayManager.hide()
+        overlayManager.release()
         motionDetector.stop()
         unregisterReceiver(batteryReceiver)
         if (::fusedLocationClient.isInitialized) fusedLocationClient.removeLocationUpdates(locationCallback)

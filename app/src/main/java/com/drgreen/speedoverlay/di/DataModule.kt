@@ -12,6 +12,7 @@ import com.drgreen.speedoverlay.data.SpeedRepository
 import com.drgreen.speedoverlay.logic.OsmParser
 import com.drgreen.speedoverlay.util.HardwareHelper
 import com.drgreen.speedoverlay.util.MotionDetector
+import com.drgreen.speedoverlay.util.PermissionManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -72,5 +73,11 @@ object DataModule {
     @Singleton
     fun provideMotionDetector(@ApplicationContext context: Context): MotionDetector {
         return MotionDetector(context)
+    }
+
+    @Provides
+    @Singleton
+    fun providePermissionManager(@ApplicationContext context: Context): PermissionManager {
+        return PermissionManager(context)
     }
 }

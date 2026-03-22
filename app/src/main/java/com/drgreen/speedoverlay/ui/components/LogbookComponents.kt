@@ -4,11 +4,14 @@
 
 package com.drgreen.speedoverlay.ui.components
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -18,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +39,7 @@ import java.util.Locale
 fun LogbookDialog(logManager: LogManager, onDismiss: () -> Unit) {
     val logs by logManager.getAllLogs().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -60,8 +65,16 @@ fun LogbookDialog(logManager: LogManager, onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("Schließen") }
         },
         dismissButton = {
-            IconButton(onClick = { scope.launch { logManager.clearLogs() } }) {
-                Icon(Icons.Default.Delete, contentDescription = "Alles löschen", tint = Color.Red)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (logs.isNotEmpty()) {
+                    IconButton(onClick = { exportAndShareLogs(context, logs) }) {
+                        Icon(Icons.Default.Share, contentDescription = "Exportieren")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+                IconButton(onClick = { scope.launch { logManager.clearLogs() } }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Alles löschen", tint = Color.Red)
+                }
             }
         }
     )
@@ -81,4 +94,23 @@ fun LogEntryItem(log: LogEntry) {
             color = Color.Gray
         )
     }
+}
+
+private fun exportAndShareLogs(context: Context, logs: List<LogEntry>) {
+    val sb = StringBuilder()
+    sb.append("Datum,Dauer(s),Limit,MaxSpeed,AvgSpeed,Einheit,StartLat,StartLon\n")
+    val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+    logs.forEach { log ->
+        val date = df.format(Date(log.startTime))
+        val duration = (log.endTime - log.startTime) / 1000
+        sb.append("$date,$duration,${log.speedLimit},${log.maxSpeed},${log.avgSpeed},${log.unit},${log.startLat},${log.startLon}\n")
+    }
+
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_SUBJECT, "Speed Overlay Logbuch Export")
+        putExtra(Intent.EXTRA_TEXT, sb.toString())
+    }
+    context.startActivity(Intent.createChooser(intent, "Logbuch exportieren"))
 }
