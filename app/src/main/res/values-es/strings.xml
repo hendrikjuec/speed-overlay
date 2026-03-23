@@ -18,6 +18,7 @@
     <string name="use_mph">Usar MPH</string>
     <string name="use_mph_desc">Cambiar unidades de km/h a mph</string>
     <string name="tolerance_title">Tolerancia de Velocidad</string>
+    <string name="show_speed_cameras">Mostrar radares</string>
 
     <string name="appearance_group">Apariencia</string>
     <string name="overlay_size">Tamaño de la Superposición</string>
@@ -61,4 +62,12 @@
     <string name="battery_opt_message">Para garantizar un seguimiento preciso de la velocidad en segundo plano, desactive la optimización de batería para esta aplicación.</string>
     <string name="battery_opt_ok">Ajustes</string>
     <string name="battery_opt_cancel">Cancelar</string>
+
+    <!-- Overlay States -->
+    <string name="overlay_unlimited">Sin límite</string>
+    <string name="overlay_variable">Variable</string>
+    <string name="overlay_urban">Zona urbana</string>
+    <string name="overlay_hazard">Peligro</string>
+    <string name="overlay_camera">Radar</string>
+    <string name="overlay_muted">Silenciado</string>
 </resources>

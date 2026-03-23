@@ -11,12 +11,24 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 
-@RunWith(RobolectricTestRunner::class)
+/**
+ * Unit Tests für den SpeedProcessor.
+ * Da Location gemockt wird, ist kein Robolectric erforderlich.
+ */
 class SpeedProcessorTest {
+
     private val processor = SpeedProcessor(smoothingWindow = 3)
+
+    private companion object {
+        const val SPEED_10_MS = 10f
+        const val SPEED_20_MS = 20f
+        const val SPEED_30_MS = 30f
+        const val SPEED_36_KMH = 36
+        const val SPEED_46_KMH = 46
+        const val SPEED_57_KMH = 57
+        const val SPEED_22_MPH = 22
+    }
 
     private fun createMockLocation(speedMs: Float, accuracy: Float = 5f): Location {
         val loc = mockk<Location>()
@@ -28,44 +40,47 @@ class SpeedProcessorTest {
 
     @Test
     fun testSpeedSmoothing() {
-        // Expected values are influenced by Kalman Filter + Moving Average (Window 3)
-        // 1. Input 10 m/s (36 km/h) -> Kalman init to 10 -> Avg(10) -> 36 km/h
-        assertEquals(36, processor.getSmoothedSpeed(createMockLocation(10f), false))
+        // Die geglätteten Werte resultieren aus der Kombination von Kalman-Filter und Moving Average (Fenster 3).
 
-        // 2. Input 20 m/s (72 km/h) -> Kalman update ~15.8 -> Avg(10, 15.8) -> ~46 km/h
-        assertEquals(46, processor.getSmoothedSpeed(createMockLocation(20f), false))
+        // 1. Eingabe 10 m/s (36 km/h) -> Kalman initialisiert auf 10 -> Schnitt(10) -> 36 km/h
+        assertEquals(SPEED_36_KMH, processor.getSmoothedSpeed(createMockLocation(SPEED_10_MS), false))
 
-        // 3. Input 30 m/s (108 km/h) -> Kalman update ~21.8 -> Avg(10, 15.8, 21.8) -> ~57 km/h
-        assertEquals(57, processor.getSmoothedSpeed(createMockLocation(30f), false))
+        // 2. Eingabe 20 m/s (72 km/h) -> Kalman Update auf ~15.8 -> Schnitt(10, 15.8) -> ~46 km/h
+        assertEquals(SPEED_46_KMH, processor.getSmoothedSpeed(createMockLocation(SPEED_20_MS), false))
 
-        // Test MPH: 10 m/s ~ 22 mph
+        // 3. Eingabe 30 m/s (108 km/h) -> Kalman Update auf ~21.8 -> Schnitt(10, 15.8, 21.8) -> ~57 km/h
+        assertEquals(SPEED_57_KMH, processor.getSmoothedSpeed(createMockLocation(SPEED_30_MS), false))
+    }
+
+    @Test
+    fun testUnitConversionMph() {
         processor.clearHistory()
-        assertEquals(22, processor.getSmoothedSpeed(createMockLocation(10f), true))
+        // 10 m/s sind ca. 22.37 mph
+        assertEquals(SPEED_22_MPH, processor.getSmoothedSpeed(createMockLocation(SPEED_10_MS), true))
     }
 
     @Test
     fun testIsSpeeding() {
-        assertFalse(processor.isSpeeding(55, 50, 5))
-        assertTrue(processor.isSpeeding(56, 50, 5))
-        assertFalse(processor.isSpeeding(100, null, 5))
+        assertFalse("55 in 50er Zone mit 5 Toleranz ist OK", processor.isSpeeding(55, 50, 5))
+        assertTrue("56 in 50er Zone mit 5 Toleranz ist zu schnell", processor.isSpeeding(56, 50, 5))
+        assertFalse("Ohne Limit keine Warnung", processor.isSpeeding(100, null, 5))
     }
 
     @Test
     fun testJitterFilter() {
-        // Jitter should be 0 based on current Config
+        // Minimale Geschwindigkeiten (Jitter) sollten als 0 gewertet werden
         assertEquals(0, processor.getSmoothedSpeed(createMockLocation(0.2f), false))
 
-        // Real movement should trigger
+        // Echte Bewegung sollte erkannt werden
         assertTrue(processor.getSmoothedSpeed(createMockLocation(2.0f), false) > 0)
     }
 
     @Test
     fun testMotionDetectorIntegration() {
-        // Test: MotionDetector reports STILL (isMoving = false)
-        // Must force 0 km/h even if GPS reports movement
+        // Wenn der MotionDetector STILL meldet, muss die Geschwindigkeit 0 sein, egal was GPS sagt
         assertEquals(0, processor.getSmoothedSpeed(createMockLocation(100f), false, isPhysicallyMoving = false))
 
-        // Test: MotionDetector reports MOVING (isMoving = true)
+        // Wenn er sich wieder bewegt, sollte die Historie zurückgesetzt sein
         processor.clearHistory()
         assertTrue(processor.getSmoothedSpeed(createMockLocation(10f), false, isPhysicallyMoving = true) > 0)
     }
@@ -79,7 +94,7 @@ class SpeedProcessorTest {
 
     @Test
     fun testExtremeValues() {
-        // Speed of sound test
+        // Schallgeschwindigkeit (343 m/s)
         assertEquals(1235, processor.getSmoothedSpeed(createMockLocation(343f), false))
 
         processor.clearHistory()
@@ -91,10 +106,10 @@ class SpeedProcessorTest {
 
     @Test
     fun testAccuracyFilter() {
-        // First good value: 10 m/s (36 km/h)
+        // Erstes gültiges Signal
         processor.getSmoothedSpeed(createMockLocation(10f, 5f), false)
 
-        // Bad accuracy value (50m > 25m threshold) - should return previous valid speed
+        // Schlechtes Signal (Genauigkeit 50m) -> Sollte den letzten gültigen Wert (36 km/h) beibehalten
         assertEquals(36, processor.getSmoothedSpeed(createMockLocation(50f, 50f), false))
     }
 }

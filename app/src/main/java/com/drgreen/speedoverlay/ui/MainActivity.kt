@@ -7,20 +7,41 @@ package com.drgreen.speedoverlay.ui
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -29,37 +50,36 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.drgreen.speedoverlay.R
-import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.service.SpeedService
-import com.drgreen.speedoverlay.ui.components.*
+import com.drgreen.speedoverlay.ui.components.OnboardingScreen
+import com.drgreen.speedoverlay.ui.components.SettingDarkMode
+import com.drgreen.speedoverlay.ui.components.SettingLanguage
+import com.drgreen.speedoverlay.ui.components.SettingSlider
+import com.drgreen.speedoverlay.ui.components.SettingSwitch
+import com.drgreen.speedoverlay.ui.components.SettingsCard
 import com.drgreen.speedoverlay.util.PermissionManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 /**
- * Der Haupteinstiegspunkt der App. Verwaltet Einstellungen, Onboarding und den Service-Start.
- * Nutzt AppCompatActivity zur besseren Unterstützung von AppCompatDelegate (z.B. Sprachumschaltung).
+ * Main Activity of the application.
+ * Handles the entry point, theme selection, and navigation between Onboarding and Main Settings.
  */
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     @Inject lateinit var settingsManager: SettingsManager
-    @Inject lateinit var logManager: LogManager
     @Inject lateinit var permissionManager: PermissionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // Initialisiert die gespeicherten Einstellungen (Sprache, Dark Mode)
         settingsManager.applySettings()
 
         setContent {
             val darkModeState by settingsManager.darkModeFlow.collectAsStateWithLifecycle(initialValue = 0)
-            val isDisclaimerAccepted = remember { mutableStateOf(settingsManager.isDisclaimerAccepted) }
 
-            // Permission states that refresh on ON_RESUME
             var hasLocation by remember { mutableStateOf(permissionManager.hasLocationPermission()) }
             var hasOverlay by remember { mutableStateOf(permissionManager.hasOverlayPermission()) }
 
@@ -74,19 +94,14 @@ class MainActivity : AppCompatActivity() {
                 else -> isSystemInDarkTheme()
             }
 
-            MaterialTheme(
-                colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
-            ) {
+            MaterialTheme(colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (!isDisclaimerAccepted.value) {
+                    if (!hasLocation || !hasOverlay) {
                         OnboardingScreen(
-                            onFinished = {
-                                settingsManager.isDisclaimerAccepted = true
-                                isDisclaimerAccepted.value = true
-                            },
+                            onFinished = { /* State driven */ },
                             onGrantLocation = { permissionManager.requestLocationPermission(this) },
                             onGrantOverlay = { permissionManager.requestOverlayPermission(this) },
                             hasLocation = hasLocation,
@@ -95,12 +110,9 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         MainScreen(
                             settings = settingsManager,
-                            logManager = logManager,
-                            permissionManager = permissionManager,
                             onStart = { startSpeedService() },
                             onStop = { stopSpeedService() },
-                            currentDarkMode = darkModeState,
-                            activity = this
+                            currentDarkMode = darkModeState
                         )
                     }
                 }
@@ -109,16 +121,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSpeedService() {
-        if (!permissionManager.hasLocationPermission()) {
-            permissionManager.requestLocationPermission(this)
-            return
-        }
-
-        if (!permissionManager.hasOverlayPermission()) {
-            permissionManager.requestOverlayPermission(this)
-            return
-        }
-
         val intent = Intent(this, SpeedService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -128,44 +130,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopSpeedService() {
-        val intent = Intent(this, SpeedService::class.java)
-        stopService(intent)
+        stopService(Intent(this, SpeedService::class.java))
     }
 }
 
+/**
+ * Main Settings Screen where the user can control the service and adjust settings.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     settings: SettingsManager,
-    logManager: LogManager,
-    permissionManager: PermissionManager,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    currentDarkMode: Int,
-    activity: MainActivity
+    currentDarkMode: Int
 ) {
     val tolerance by settings.toleranceFlow.collectAsStateWithLifecycle(initialValue = 5)
     val overlaySize by settings.overlaySizeFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
     val overlayAlpha by settings.overlayAlphaFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
     val useMph by settings.useMphFlow.collectAsStateWithLifecycle(initialValue = false)
     val audioWarning by settings.audioWarningFlow.collectAsStateWithLifecycle(initialValue = true)
-    val autostartBt by settings.autostartBtFlow.collectAsStateWithLifecycle(initialValue = false)
-    val autostartPower by settings.autostartPowerFlow.collectAsStateWithLifecycle(initialValue = false)
-    val autostartBtDevice by settings.autostartBtDeviceFlow.collectAsStateWithLifecycle(initialValue = null)
+    val showCameras by settings.showSpeedCamerasFlow.collectAsStateWithLifecycle(initialValue = false)
+    val autostartBoot by settings.autostartBootFlow.collectAsStateWithLifecycle(initialValue = false)
     val language by settings.languageFlow.collectAsStateWithLifecycle(initialValue = "en")
-
-    val transparency = (1f - overlayAlpha).coerceIn(0f, 1f)
-    var showLogbook by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.ExtraBold) },
-                actions = {
-                    IconButton(onClick = { showLogbook = true }) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Logbuch")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -183,7 +175,8 @@ fun MainScreen(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            SettingsCard(title = "Service Control") {
+            // Service Control
+            SettingsCard(title = stringResource(R.string.service_control_group)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -209,56 +202,52 @@ fun MainScreen(
                 }
             }
 
+            // General Settings
             SettingsCard(title = stringResource(R.string.settings_title)) {
-                SettingSwitch(stringResource(R.string.use_mph), useMph) {
-                    settings.useMph = it
-                }
-                SettingSwitch(stringResource(R.string.audio_warning), audioWarning) {
-                    settings.isAudioWarningEnabled = it
-                    if (it) settings.isAudioMutedTemporary = false
-                }
-                SettingLanguage(currentLanguage = language) { newLang ->
-                    settings.language = newLang
-                }
-                SettingDarkMode(currentMode = currentDarkMode) { newMode ->
-                    settings.darkMode = newMode
-                }
+                SettingSwitch(stringResource(R.string.use_mph), useMph) { settings.useMph = it }
+                SettingSwitch(stringResource(R.string.audio_warning), audioWarning) { settings.isAudioWarningEnabled = it }
+                SettingSwitch(stringResource(R.string.show_speed_cameras), showCameras) { settings.showSpeedCameras = it }
+                SettingLanguage(currentLanguage = language) { settings.language = it }
+                SettingDarkMode(currentMode = currentDarkMode) { settings.darkMode = it }
             }
 
+            // Automation
             SettingsCard(title = stringResource(R.string.automation_group)) {
-                SettingSwitch(stringResource(R.string.autostart_bt), autostartBt) {
-                    settings.isAutostartBtEnabled = it
-                    if (it && !permissionManager.hasBluetoothPermission()) {
-                        permissionManager.requestBluetoothPermission(activity)
-                    }
-                }
-                if (autostartBt) {
-                    SettingBluetoothDevice(currentAddress = autostartBtDevice) {
-                        settings.autostartBtDeviceAddress = it
-                    }
-                }
-                SettingSwitch(stringResource(R.string.autostart_power), autostartPower) {
-                    settings.isAutostartPowerEnabled = it
+                SettingSwitch(stringResource(R.string.autostart_boot), autostartBoot) {
+                    settings.isAutostartBootEnabled = it
                 }
             }
 
+            // Appearance
             SettingsCard(title = stringResource(R.string.appearance_group)) {
-                SettingSlider(stringResource(R.string.tolerance_title), tolerance.toFloat(), 0f..30f, "%.0f km/h") {
+                val unitLabel = if (useMph) " mph" else " km/h"
+                SettingSlider(
+                    label = stringResource(R.string.tolerance_title),
+                    value = tolerance.toFloat(),
+                    range = 0f..30f,
+                    format = "%.0f$unitLabel"
+                ) {
                     settings.tolerance = it.toInt()
                 }
-                SettingSlider(stringResource(R.string.overlay_size), overlaySize, 0.5f..2.5f, "%.1fx") {
+                SettingSlider(
+                    label = stringResource(R.string.overlay_size),
+                    value = overlaySize,
+                    range = 0.5f..2.5f,
+                    format = "%.1fx"
+                ) {
                     settings.overlaySize = it
                 }
-                SettingSlider(stringResource(R.string.overlay_alpha), transparency, 0f..1f, "%d%%", 100f) {
+                SettingSlider(
+                    label = stringResource(R.string.overlay_alpha),
+                    value = (1f - overlayAlpha).coerceIn(0f, 1f),
+                    range = 0f..1f,
+                    format = "%d%%",
+                    factor = 100f
+                ) {
                     settings.overlayAlpha = (1f - it).coerceIn(0f, 1f)
                 }
             }
-
             Spacer(modifier = Modifier.height(32.dp))
         }
-    }
-
-    if (showLogbook) {
-        LogbookDialog(logManager = logManager, onDismiss = { showLogbook = false })
     }
 }

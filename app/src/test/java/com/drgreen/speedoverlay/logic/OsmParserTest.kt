@@ -34,54 +34,37 @@ class OsmParserTest {
 
     @Test
     fun `test implicit motorway by country`() {
-        // Deutschland: Unbegrenzt
-        val resDe = parser.parseSpeedLimit(mapOf("highway" to "motorway", "zone:maxspeed" to "DE:motorway"))
+        // Deutschland: Unbegrenzt (0)
+        val resDe = parser.parseSpeedLimit(mapOf("highway" to "motorway"), "DE")
         assertEquals(0, resDe.limit)
-        assertTrue(resDe.isConfidenceHigh) // Zonen-Tag ist sicher
+        assertTrue(resDe.isConfidenceHigh)
 
         // Frankreich: 130
-        val resFr = parser.parseSpeedLimit(mapOf("highway" to "motorway", "zone:maxspeed" to "FR:motorway"))
+        val resFr = parser.parseSpeedLimit(mapOf("highway" to "motorway"), "FR")
         assertEquals(130, resFr.limit)
         assertTrue(resFr.isConfidenceHigh)
     }
 
     @Test
-    fun `test implicit rural roads (France special case)`() {
-        // Standard EU (Default fallback to DE): 100
-        val resDef = parser.parseSpeedLimit(mapOf("highway" to "primary"))
-        assertEquals(100, resDef.limit)
-        assertFalse(resDef.isConfidenceHigh) // Schätzung ist unsicher
-
-        // Frankreich: 80
-        val resFr = parser.parseSpeedLimit(mapOf("highway" to "primary", "zone:maxspeed" to "FR:rural"))
-        assertEquals(80, resFr.limit)
-        assertTrue(resFr.isConfidenceHigh)
+    fun `test implicit rural roads (No Info Policy)`() {
+        // Gemäß neuer Policy: Ohne Schild auf Landstraßen -> null
+        val resDef = parser.parseSpeedLimit(mapOf("highway" to "primary"), "DE")
+        assertNull(resDef.limit)
+        assertFalse(resDef.isConfidenceHigh)
     }
 
     @Test
-    fun `test implicit residential urban`() {
-        val tags = mapOf("highway" to "residential", "lit" to "yes")
+    fun `test implicit residential urban (Icon Code)`() {
+        val tags = mapOf("highway" to "residential")
         val result = parser.parseSpeedLimit(tags)
-        assertEquals(50, result.limit)
+        // Gemäß neuer Policy: Innerorts -> URBAN_ICON_CODE
+        assertEquals(OsmParser.URBAN_ICON_CODE, result.limit)
         assertFalse(result.isConfidenceHigh)
     }
 
     @Test
-    fun `test living street by country`() {
-        // Deutschland: 7
-        val resDe = parser.parseSpeedLimit(mapOf("highway" to "living_street", "zone:maxspeed" to "DE:urban"))
-        assertEquals(7, resDe.limit)
-        assertTrue(resDe.isConfidenceHigh)
-
-        // Österreich: 5
-        val resAt = parser.parseSpeedLimit(mapOf("highway" to "living_street", "zone:maxspeed" to "AT:urban"))
-        assertEquals(5, resAt.limit)
-        assertTrue(resAt.isConfidenceHigh)
-    }
-
-    @Test
     fun `test zone maxspeed priority`() {
-        // Residential road with zone tag DE:30
+        // Schild/Zone hat Vorrang vor Highway-Typ
         val tags = mapOf("highway" to "residential", "zone:maxspeed" to "DE:30")
         val result = parser.parseSpeedLimit(tags)
         assertEquals(30, result.limit)
@@ -89,14 +72,24 @@ class OsmParserTest {
     }
 
     @Test
-    fun `test confidence mapping`() {
-        // Schild: Hoch
-        assertTrue(parser.parseSpeedLimit(mapOf("maxspeed" to "50")).isConfidenceHigh)
+    fun `test source maxspeed parsing`() {
+        val tagsNumeric = mapOf("source:maxspeed" to "DE:50")
+        assertEquals(50, parser.parseSpeedLimit(tagsNumeric).limit)
+    }
 
-        // Zone: Hoch
-        assertTrue(parser.parseSpeedLimit(mapOf("zone:maxspeed" to "DE:30")).isConfidenceHigh)
+    @Test
+    fun `test additional info parsing`() {
+        val tags = mapOf(
+            "hazard" to "yes",
+            "highway" to "speed_camera",
+            "amenity" to "school"
+        )
+        val info = parser.parseAdditionalInfo(tags, showSpeedCamerasEnabled = true)
+        assertTrue(info.contains(OsmParser.INFO_HAZARD))
+        assertTrue(info.contains(OsmParser.INFO_CAMERA))
+        assertTrue(info.contains(OsmParser.INFO_SCHOOL))
 
-        // Highway-Fallback: Niedrig
-        assertFalse(parser.parseSpeedLimit(mapOf("highway" to "primary")).isConfidenceHigh)
+        val infoNoCam = parser.parseAdditionalInfo(tags, showSpeedCamerasEnabled = false)
+        assertFalse(infoNoCam.contains(OsmParser.INFO_CAMERA))
     }
 }

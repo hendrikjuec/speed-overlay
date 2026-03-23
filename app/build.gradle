@@ -19,8 +19,8 @@ android {
         applicationId "com.drgreen.speedoverlay"
         minSdk 28
         targetSdk 35
-        versionCode 6
-        versionName "1.3"
+        versionCode 7
+        versionName "1.4"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,15 +56,22 @@ android {
             returnDefaultValues = true
         }
     }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
 }
 
 dependencies {
+    // Platform / Core
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
 
-    // Compose
+    // Jetpack Compose
     def composeBom = platform('androidx.compose:compose-bom:2025.01.01')
     implementation composeBom
     androidTestImplementation composeBom
@@ -76,29 +83,29 @@ dependencies {
     implementation 'androidx.activity:activity-compose:1.10.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
 
+    // Google Services
     implementation 'com.google.android.gms:play-services-location:21.3.0'
 
-    // DataStore
+    // Architecture Components
     implementation "androidx.datastore:datastore-preferences:1.1.2"
 
-    // Room
+    // Room Database
     def room_version = "2.6.1"
     implementation "androidx.room:room-runtime:$room_version"
     implementation "androidx.room:room-ktx:$room_version"
     ksp "androidx.room:room-compiler:$room_version"
 
-    // Hilt
-    implementation "com.google.dagger:hilt-android:2.55"
-    ksp "com.google.dagger:hilt-compiler:2.55"
+    // Dependency Injection (Hilt)
+    def hilt_version = "2.55"
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    ksp "com.google.dagger:hilt-compiler:$hilt_version"
 
-    // Networking
-    implementation 'com.squareup.retrofit2:retrofit:3.0.0'
-    implementation 'com.squareup.retrofit2:converter-gson:3.0.0'
+    // Networking (Retrofit)
+    def retrofit_version = "3.0.0"
+    implementation "com.squareup.retrofit2:retrofit:$retrofit_version"
+    implementation "com.squareup.retrofit2:converter-gson:$retrofit_version"
 
-    // Google Play Billing (Monetization)
-    implementation "com.android.billingclient:billing-ktx:7.0.0"
-
-    // Testing
+    // --- Testing ---
     testImplementation 'junit:junit:4.13.2'
     testImplementation "org.robolectric:robolectric:4.14.1"
     testImplementation "io.mockk:mockk:1.13.13"
@@ -107,9 +114,8 @@ dependencies {
     testImplementation 'androidx.test.ext:junit-ktx:1.2.1'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
 
-    // Compose Testing in Unit Tests (Robolectric)
+    // UI Testing
     testImplementation 'androidx.compose.ui:ui-test-junit4'
-
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
@@ -118,7 +124,11 @@ dependencies {
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
 }
 
+// Jacoco Report Configuration
 tasks.register('jacocoTestReport', JacocoReport) {
+    group = "Reporting"
+    description = "Generate Jacoco coverage reports for Debug build."
+
     dependsOn 'testDebugUnitTest'
 
     reports {
@@ -126,12 +136,17 @@ tasks.register('jacocoTestReport', JacocoReport) {
         html.required = true
     }
 
-    def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*', '**/*Test*.*', 'android/**/*.*']
-    def debugTree = fileTree(dir: "${project.layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug", excludes: fileFilter)
+    def fileFilter = [
+        '**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*',
+        '**/*Test*.*', 'android/**/*.*', '**/*_Factory.*', '**/*_MembersInjector.*',
+        '**/*Dagger*', '**/Hilt_*.class'
+    ]
+
+    def kotlinTree = fileTree(dir: "${project.layout.buildDirectory.get().asFile}/tmp/kotlin-classes/debug", excludes: fileFilter)
     def mainSrc = "${project.projectDir}/src/main/java"
 
     sourceDirectories.setFrom(files([mainSrc]))
-    classDirectories.setFrom(files([debugTree]))
+    classDirectories.setFrom(files([kotlinTree]))
     executionData.setFrom(fileTree(dir: project.layout.buildDirectory.get().asFile, includes: [
             'jacoco/testDebugUnitTest.exec', 'outputs/code_coverage/debugAndroidTest/connected/*coverage.ec'
     ]))
