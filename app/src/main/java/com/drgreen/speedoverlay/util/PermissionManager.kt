@@ -24,7 +24,6 @@ open class PermissionManager(private val context: Context) {
     companion object {
         const val REQ_LOCATION = 100
         const val REQ_OVERLAY = 101
-        const val REQ_BT = 102
         const val REQ_POST_NOTIFICATIONS = 103
     }
 
@@ -61,30 +60,6 @@ open class PermissionManager(private val context: Context) {
         } catch (e: Exception) {
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
             activity.startActivity(intent)
-        }
-    }
-
-    /** Prüft auf Bluetooth-Berechtigung (ab Android 12 erforderlich). */
-    open fun hasBluetoothPermission(): Boolean {
-        return when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
-            }
-            else -> true
-        }
-    }
-
-    /** Fordert Bluetooth-Berechtigung an. */
-    open fun requestBluetoothPermission(activity: Activity) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ActivityCompat.requestPermissions(
-                activity,
-                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                REQ_BT
-            )
         }
     }
 

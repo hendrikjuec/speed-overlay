@@ -22,13 +22,10 @@ class SpeedBlackboxTest {
         val testCases = listOf(
             mapOf("maxspeed" to "50") to 50,
             mapOf("maxspeed" to "120 km/h") to 120,
-            mapOf("maxspeed" to "DE:urban") to 50,
-            mapOf("maxspeed" to "DE:rural") to 100,
-            mapOf("maxspeed" to "DE:motorway") to 0,
-            mapOf("maxspeed" to "walk") to 5,
-            mapOf("highway" to "living_street") to 7, // DE default is 7
             mapOf("maxspeed" to "none") to 0,
-            mapOf("maxspeed" to "signals") to -1,
+            mapOf("maxspeed" to "unlimited") to 0,
+            mapOf("highway" to "residential") to OsmParser.URBAN_ICON_CODE,
+            mapOf("highway" to "motorway") to 0,
             mapOf("maxspeed" to "") to null,
             null to null
         )
@@ -51,7 +48,7 @@ class SpeedBlackboxTest {
             Triple(40, limit, tolerance) to false,
             Triple(100, null, tolerance) to false,
             Triple(200, 0, tolerance) to false, // Unbegrenzt -> Keine Warnung
-            Triple(200, -1, tolerance) to false  // Variabel -> Keine Warnung
+            Triple(200, OsmParser.URBAN_ICON_CODE, tolerance) to true // Innerorts (50) -> Warnung
         )
 
         scenarios.forEach { (params, shouldWarn) ->

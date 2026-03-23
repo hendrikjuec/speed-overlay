@@ -9,29 +9,33 @@ import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+internal val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-/**
- * Zentrale Verwaltung der Anwendungseinstellungen.
- * Nutzt Jetpack DataStore für Persistenz und StateFlows für reaktive UI-Updates.
- * Synchronisiert die Spracheinstellung mit AppCompatDelegate für konsistente Lokalisierung.
- */
 class SettingsManager(private val context: Context) {
 
     private val dataStore = context.dataStore
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // StateFlow als Single Source of Truth für synchronen und reaktiven Zugriff
     val prefsState = dataStore.data.stateIn(
         scope = scope,
         started = SharingStarted.Eagerly,
@@ -40,9 +44,7 @@ class SettingsManager(private val context: Context) {
 
     companion object {
         val TOLERANCE = intPreferencesKey("tolerance")
-        val AUTOSTART_BT = booleanPreferencesKey("autostart_bt")
-        val AUTOSTART_BT_DEVICE = stringPreferencesKey("autostart_bt_device")
-        val AUTOSTART_POWER = booleanPreferencesKey("autostart_power")
+        val AUTOSTART_BOOT = booleanPreferencesKey("autostart_boot")
         val AUDIO_WARNING = booleanPreferencesKey("audio_warning")
         val AUDIO_MUTED_TEMPORARY = booleanPreferencesKey("audio_muted_temporary")
         val UNIT_MPH = booleanPreferencesKey("unit_mph")
@@ -60,40 +62,26 @@ class SettingsManager(private val context: Context) {
         const val DEFAULT_TOLERANCE = 5
     }
 
-    // --- Reaktive Flows für Compose ---
+    // --- Flows ---
+    val autostartBootFlow = prefsState.map { it[AUTOSTART_BOOT] ?: false }.distinctUntilChanged()
     val toleranceFlow = prefsState.map { it[TOLERANCE] ?: DEFAULT_TOLERANCE }.distinctUntilChanged()
     val useMphFlow = prefsState.map { it[UNIT_MPH] ?: false }.distinctUntilChanged()
     val audioWarningFlow = prefsState.map { it[AUDIO_WARNING] ?: true }.distinctUntilChanged()
-    val autostartBtFlow = prefsState.map { it[AUTOSTART_BT] ?: false }.distinctUntilChanged()
-    val autostartBtDeviceFlow = prefsState.map { it[AUTOSTART_BT_DEVICE] }.distinctUntilChanged()
-    val autostartPowerFlow = prefsState.map { it[AUTOSTART_POWER] ?: false }.distinctUntilChanged()
+    val showSpeedCamerasFlow = prefsState.map { it[SHOW_SPEED_CAMERAS] ?: false }.distinctUntilChanged()
     val overlaySizeFlow = prefsState.map { it[OVERLAY_SIZE] ?: 1.0f }.distinctUntilChanged()
     val overlayAlphaFlow = prefsState.map { it[OVERLAY_ALPHA] ?: 1.0f }.distinctUntilChanged()
     val overlayTextColorFlow = prefsState.map { it[OVERLAY_TEXT_COLOR] ?: Color.WHITE }.distinctUntilChanged()
     val darkModeFlow = prefsState.map { it[DARK_MODE] ?: 0 }.distinctUntilChanged()
+    val languageFlow = prefsState.map { it[LANGUAGE] ?: getDefaultLanguage() }.distinctUntilChanged()
 
-    val languageFlow = prefsState.map {
-        // Wir priorisieren die aktuell in AppCompat gesetzte Sprache, um Race Conditions bei Activity-Recreates zu vermeiden
-        AppCompatDelegate.getApplicationLocales().get(0)?.language ?: it[LANGUAGE] ?: getDefaultLanguage()
-    }.distinctUntilChanged()
-
-    // --- Synchroner Zugriff (Properties) ---
+    // --- Properties ---
+    var isAutostartBootEnabled: Boolean
+        get() = prefsState.value[AUTOSTART_BOOT] ?: false
+        set(value) = update(AUTOSTART_BOOT, value)
 
     var tolerance: Int
         get() = prefsState.value[TOLERANCE] ?: DEFAULT_TOLERANCE
         set(value) = update(TOLERANCE, value)
-
-    var isAutostartBtEnabled: Boolean
-        get() = prefsState.value[AUTOSTART_BT] ?: false
-        set(value) = update(AUTOSTART_BT, value)
-
-    var autostartBtDeviceAddress: String?
-        get() = prefsState.value[AUTOSTART_BT_DEVICE]
-        set(value) = updateNullable(AUTOSTART_BT_DEVICE, value)
-
-    var isAutostartPowerEnabled: Boolean
-        get() = prefsState.value[AUTOSTART_POWER] ?: false
-        set(value) = update(AUTOSTART_POWER, value)
 
     var isAudioWarningEnabled: Boolean
         get() = prefsState.value[AUDIO_WARNING] ?: true
@@ -147,7 +135,7 @@ class SettingsManager(private val context: Context) {
         }
 
     var language: String
-        get() = AppCompatDelegate.getApplicationLocales().get(0)?.language ?: prefsState.value[LANGUAGE] ?: getDefaultLanguage()
+        get() = prefsState.value[LANGUAGE] ?: getDefaultLanguage()
         set(value) {
             update(LANGUAGE, value)
             applyLanguage(value)
@@ -157,21 +145,9 @@ class SettingsManager(private val context: Context) {
         scope.launch { dataStore.edit { it[key] = value } }
     }
 
-    private fun <T> updateNullable(key: Preferences.Key<T>, value: T?) {
-        scope.launch { dataStore.edit { if (value == null) it.remove(key) else it[key] = value } }
-    }
-
     fun applySettings() {
         applyDarkMode(darkMode)
         applyLanguage(language)
-    }
-
-    private fun getDefaultLanguage(): String {
-        val systemLanguage = Locale.getDefault().language
-        return when (systemLanguage) {
-            "de" -> "de"; "es" -> "es"; "fr" -> "fr"; "it" -> "it"
-            else -> "en"
-        }
     }
 
     private fun applyDarkMode(mode: Int) {
@@ -180,21 +156,13 @@ class SettingsManager(private val context: Context) {
             2 -> AppCompatDelegate.MODE_NIGHT_YES
             else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
-        if (AppCompatDelegate.getDefaultNightMode() != appMode) {
-            AppCompatDelegate.setDefaultNightMode(appMode)
-        }
+        AppCompatDelegate.setDefaultNightMode(appMode)
     }
 
     private fun applyLanguage(lang: String) {
-        val currentLocales = AppCompatDelegate.getApplicationLocales()
-        if (currentLocales.isEmpty || currentLocales.get(0)?.language != lang) {
-            val targetLocale = LocaleListCompat.forLanguageTags(lang)
-            AppCompatDelegate.setApplicationLocales(targetLocale)
-        }
+        val targetLocale = LocaleListCompat.forLanguageTags(lang)
+        AppCompatDelegate.setApplicationLocales(targetLocale)
     }
 
-    // Listener-Support für Abwärtskompatibilität (optional)
-    fun addListener(listener: OnSettingsChangedListener) {}
-    fun removeListener(listener: OnSettingsChangedListener) {}
-    interface OnSettingsChangedListener { fun onSettingChanged(key: String) }
+    private fun getDefaultLanguage(): String = Locale.getDefault().language
 }

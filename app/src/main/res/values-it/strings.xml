@@ -18,6 +18,7 @@
     <string name="use_mph">Usa MPH</string>
     <string name="use_mph_desc">Cambia unità da km/h a mph</string>
     <string name="tolerance_title">Toleranza velocità</string>
+    <string name="show_speed_cameras">Mostra autovelox</string>
 
     <string name="appearance_group">Aspetto</string>
     <string name="overlay_size">Dimensione sovrapposizione</string>
@@ -61,4 +62,12 @@
     <string name="battery_opt_message">Per garantire un monitoraggio accurato della velocità in background, disabilita l\'ottimizzazione della batteria per questa app.</string>
     <string name="battery_opt_ok">Impostazioni</string>
     <string name="battery_opt_cancel">Annulla</string>
+
+    <!-- Overlay States -->
+    <string name="overlay_unlimited">Illimitato</string>
+    <string name="overlay_variable">Variabile</string>
+    <string name="overlay_urban">Centro abitato</string>
+    <string name="overlay_hazard">Pericolo</string>
+    <string name="overlay_camera">Autovelox</string>
+    <string name="overlay_muted">Muto</string>
 </resources>

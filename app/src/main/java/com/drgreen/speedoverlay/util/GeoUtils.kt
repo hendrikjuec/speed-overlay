@@ -6,11 +6,17 @@ package com.drgreen.speedoverlay.util
 
 import android.location.Location
 import com.drgreen.speedoverlay.data.GeometryPoint
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
+/**
+ * Geographic utility functions for distance and heading calculations.
+ */
 object GeoUtils {
     /**
-     * Berechnet den Bearing (0-360 Grad) zwischen zwei Punkten.
+     * Calculates the bearing (0-360 degrees) between two points.
      */
     fun calculateBearing(p1: GeometryPoint, p2: GeometryPoint): Float {
         val lat1 = Math.toRadians(p1.lat)
@@ -27,7 +33,7 @@ object GeoUtils {
     }
 
     /**
-     * Berechnet die minimale Winkeldifferenz zwischen zwei Headings.
+     * Calculates the minimal angular difference between two headings.
      */
     fun getHeadingDifference(h1: Float, h2: Float): Float {
         val diff = abs(h1 - h2) % 360
@@ -35,7 +41,7 @@ object GeoUtils {
     }
 
     /**
-     * Berechnet die Distanz zwischen einem Punkt und einem Liniensegment (vereinfacht).
+     * Calculates the distance between a coordinate and a geometry point.
      */
     fun distanceToPoint(lat: Double, lon: Double, p: GeometryPoint): Float {
         val results = FloatArray(1)

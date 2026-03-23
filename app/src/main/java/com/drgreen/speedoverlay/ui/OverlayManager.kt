@@ -14,6 +14,7 @@ import android.view.WindowManager
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -29,8 +30,12 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
- * Verwaltet das schwebende Overlay-Fenster unter Verwendung von Jetpack Compose.
- * Nutzt reaktive Flows von SettingsManager für sofortige UI-Updates bei Einstellungsänderungen.
+ * Manages the floating overlay window using Jetpack Compose.
+ * Uses reactive flows from SettingsManager for immediate UI updates when settings change.
+ *
+ * @property context The application context.
+ * @property settings The settings manager for reactive configuration.
+ * @property onLongClick Callback triggered when the overlay is long-pressed.
  */
 class OverlayManager(
     private val context: Context,
@@ -44,7 +49,7 @@ class OverlayManager(
 
     private val overlayState = mutableStateOf<OverlayState?>(null)
 
-    // Lifecycle-Anforderungen für die Nutzung von ComposeView in einem Service
+    // Lifecycle requirements for using ComposeView in a Service
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val viewModelStore = ViewModelStore()
@@ -56,13 +61,15 @@ class OverlayManager(
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
     }
 
-    /** Erstellt und zeigt das Overlay-Fenster an. */
+    /**
+     * Creates and displays the overlay window.
+     */
     @SuppressLint("ClickableViewAccessibility")
     fun show() {
         if (composeView != null) return
 
         composeView = ComposeView(context).apply {
-            // Notwendige Owner für Compose setzen
+            // Set required owners for Compose
             setViewTreeLifecycleOwner(this@OverlayManager)
             setViewTreeViewModelStoreOwner(this@OverlayManager)
             setViewTreeSavedStateRegistryOwner(this@OverlayManager)
@@ -70,14 +77,14 @@ class OverlayManager(
             setContent {
                 val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
                 val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
-                val color by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
+                val colorInt by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
 
                 overlayState.value?.let { state ->
                     OverlayScreen(
                         state = state,
                         scale = size,
                         alpha = alpha,
-                        textColor = color
+                        textColor = Color(colorInt)
                     )
                 }
             }
@@ -105,16 +112,25 @@ class OverlayManager(
         windowManager.addView(composeView, params)
     }
 
-    /** Aktualisiert die anzuzeigenden Daten (Geschwindigkeit, Limit etc.). */
+    /**
+     * Updates the data to be displayed (speed, limit, etc.).
+     *
+     * @param state The new state of the overlay.
+     */
     fun updateState(state: OverlayState) {
         overlayState.value = state
     }
 
+    /**
+     * Triggers a visual flash effect (handled internally by Compose animations).
+     */
     fun flash() {
-        // Compose handhabt Animationen intern in OverlayScreen basierend auf State-Änderungen
+        // Compose handles animations internally in OverlayScreen based on state changes
     }
 
-    /** Entfernt das Overlay-Fenster vom Bildschirm. */
+    /**
+     * Removes the overlay window from the screen.
+     */
     fun hide() {
         composeView?.let {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
@@ -124,8 +140,10 @@ class OverlayManager(
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
 
-    /** Gibt Ressourcen frei. */
+    /**
+     * Releases resources.
+     */
     fun release() {
-        // No-op, da Flows über den Compose-Lifecycle verwaltet werden.
+        // No-op as flows are managed via the Compose lifecycle
     }
 }

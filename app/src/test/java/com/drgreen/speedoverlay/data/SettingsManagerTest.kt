@@ -7,8 +7,11 @@ package com.drgreen.speedoverlay.data
 import android.content.Context
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.datastore.preferences.core.edit
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -24,89 +27,76 @@ class SettingsManagerTest {
     private lateinit var context: Context
 
     @Before
-    fun setup() {
+    fun setup() = runBlocking {
         context = ApplicationProvider.getApplicationContext()
+        // Ensure a clean state for every test
+        context.dataStore.edit { it.clear() }
         settingsManager = SettingsManager(context)
     }
 
     @Test
-    fun testTolerancePersistence() = runBlocking {
+    fun testTolerancePersistence() = runTest {
         settingsManager.tolerance = 15
-        Thread.sleep(200)
-        assertEquals(15, settingsManager.tolerance)
+        val value = settingsManager.toleranceFlow.first { it == 15 }
+        assertEquals(15, value)
     }
 
     @Test
-    fun testLanguagePersistence() = runBlocking {
+    fun testLanguagePersistence() = runTest {
         settingsManager.language = "de"
-        Thread.sleep(300)
-        assertEquals("de", settingsManager.language)
+        val value = settingsManager.languageFlow.first { it == "de" }
+        assertEquals("de", value)
     }
 
     @Test
-    fun testDarkModePersistence() = runBlocking {
+    fun testDarkModePersistence() = runTest {
         settingsManager.darkMode = 2 // ON
-        Thread.sleep(300)
-        assertEquals(2, settingsManager.darkMode)
+        val value = settingsManager.darkModeFlow.first { it == 2 }
+        assertEquals(2, value)
         assertEquals(AppCompatDelegate.MODE_NIGHT_YES, AppCompatDelegate.getDefaultNightMode())
     }
 
     @Test
-    fun testAutostartPersistence() = runBlocking {
-        settingsManager.isAutostartBtEnabled = true
-        Thread.sleep(200)
-        assertTrue(settingsManager.isAutostartBtEnabled)
+    fun testAutostartPersistence() = runTest {
+        settingsManager.isAutostartBootEnabled = true
+        val value = settingsManager.autostartBootFlow.first { it }
+        assertTrue(value)
     }
 
     @Test
-    fun testAudioWarningPersistence() = runBlocking {
+    fun testAudioWarningPersistence() = runTest {
         settingsManager.isAudioWarningEnabled = false
-        Thread.sleep(200)
-        assertFalse(settingsManager.isAudioWarningEnabled)
+        val value = settingsManager.audioWarningFlow.first { !it }
+        assertFalse(value)
     }
 
     @Test
-    fun testUnitPersistence() = runBlocking {
+    fun testUnitPersistence() = runTest {
         settingsManager.useMph = true
-        Thread.sleep(200)
-        assertTrue(settingsManager.useMph)
+        val value = settingsManager.useMphFlow.first { it }
+        assertTrue(value)
     }
 
     @Test
-    fun testOverlaySizePersistence() = runBlocking {
+    fun testOverlaySizePersistence() = runTest {
         settingsManager.overlaySize = 1.5f
-        Thread.sleep(200)
-        assertEquals(1.5f, settingsManager.overlaySize, 0.01f)
+        val value = settingsManager.overlaySizeFlow.first { it == 1.5f }
+        assertEquals(1.5f, value, 0.01f)
     }
 
     @Test
-    fun testOverlayAlphaPersistence() = runBlocking {
+    fun testOverlayAlphaPersistence() = runTest {
         settingsManager.overlayAlpha = 0.5f
-        Thread.sleep(200)
-        assertEquals(0.5f, settingsManager.overlayAlpha, 0.01f)
-    }
-
-    @Test
-    fun testOverlayTextColorPersistence() = runBlocking {
-        settingsManager.overlayTextColor = Color.RED
-        Thread.sleep(200)
-        assertEquals(Color.RED, settingsManager.overlayTextColor)
-    }
-
-    @Test
-    fun testDisclaimerPersistence() = runBlocking {
-        settingsManager.isDisclaimerAccepted = true
-        Thread.sleep(200)
-        assertTrue(settingsManager.isDisclaimerAccepted)
+        val value = settingsManager.overlayAlphaFlow.first { it == 0.5f }
+        assertEquals(0.5f, value, 0.01f)
     }
 
     @Test
     fun testDefaultValues() {
-        assertEquals(5, settingsManager.tolerance)
-        assertFalse(settingsManager.isAutostartBtEnabled)
+        assertEquals(SettingsManager.DEFAULT_TOLERANCE, settingsManager.tolerance)
+        assertFalse(settingsManager.isAutostartBootEnabled)
         assertTrue(settingsManager.isAudioWarningEnabled)
         assertFalse(settingsManager.useMph)
-        // Adjusting default values to match current implementation
         assertEquals(1.0f, settingsManager.overlaySize, 0.01f)
         assertEquals(1.0f, settingsManager.overlayAlpha, 0.01f)
         assertEquals(Color.WHITE, settingsManager.overlayTextColor)

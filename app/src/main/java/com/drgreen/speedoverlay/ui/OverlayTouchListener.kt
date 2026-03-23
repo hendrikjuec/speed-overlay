@@ -13,7 +13,7 @@ import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
  * Behandelt Touch-Ereignisse auf dem Overlay, um Verschiebung und Long-Press zu ermöglichen.
- * Das Overlay bleibt frei positionierbar und snappt nicht an den Rand.
+ * Das Overlay bleibt frei positionierbar und wird innerhalb der Bildschirmgrenzen gehalten.
  */
 class OverlayTouchListener(
     private val windowManager: WindowManager,
@@ -22,16 +22,20 @@ class OverlayTouchListener(
     private val settingsManager: SettingsManager,
     private val onLongClick: () -> Unit = {}
 ) : View.OnTouchListener {
+
     private var initialX = 0
     private var initialY = 0
     private var initialTouchX = 0f
     private var initialTouchY = 0f
 
-    private val gestureDetector = GestureDetector(overlayView.context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onLongPress(e: MotionEvent) {
-            onLongClick()
+    private val gestureDetector = GestureDetector(
+        overlayView.context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                onLongClick()
+            }
         }
-    })
+    )
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -48,12 +52,11 @@ class OverlayTouchListener(
             MotionEvent.ACTION_MOVE -> {
                 val metrics = v.resources.displayMetrics
 
-                params.x = initialX + (event.rawX - initialTouchX).toInt()
-                params.y = initialY + (event.rawY - initialTouchY).toInt()
+                val deltaX = (event.rawX - initialTouchX).toInt()
+                val deltaY = (event.rawY - initialTouchY).toInt()
 
-                // Begrenze Position auf den Bildschirm, damit das Overlay nicht verloren geht
-                params.x = params.x.coerceIn(0, metrics.widthPixels - v.width)
-                params.y = params.y.coerceIn(0, metrics.heightPixels - v.height)
+                params.x = (initialX + deltaX).coerceIn(0, metrics.widthPixels - v.width)
+                params.y = (initialY + deltaY).coerceIn(0, metrics.heightPixels - v.height)
 
                 windowManager.updateViewLayout(overlayView, params)
                 return true

@@ -6,12 +6,12 @@ package com.drgreen.speedoverlay.util
 
 import android.content.Context
 import android.hardware.Sensor
-import android.content.Context.SENSOR_SERVICE
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.sqrt
 
 /**
@@ -20,14 +20,13 @@ import kotlin.math.sqrt
  */
 class MotionDetector(context: Context) : SensorEventListener {
 
-    private val sensorManager = context.getSystemService(SENSOR_SERVICE) as SensorManager
-    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-    private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+    private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+    private val gyroscope = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
     private val _isMovingFlow = MutableStateFlow(true)
-
     /** Ein reaktiver Flow, der den aktuellen Bewegungsstatus liefert. */
-    val isMovingFlow: StateFlow<Boolean> = _isMovingFlow
+    val isMovingFlow: StateFlow<Boolean> = _isMovingFlow.asStateFlow()
 
     private var lastMotionTimestamp = System.currentTimeMillis()
 
@@ -40,19 +39,21 @@ class MotionDetector(context: Context) : SensorEventListener {
             if (accelerometer == null && gyroscope == null) return true
             val now = System.currentTimeMillis()
             val moving = (now - lastMotionTimestamp) < Config.SENSOR_STILLSTAND_DELAY_MS
-            _isMovingFlow.value = moving
+            if (_isMovingFlow.value != moving) {
+                _isMovingFlow.value = moving
+            }
             return moving
         }
 
     /** Startet die Überwachung der Sensoren. */
     fun start() {
-        accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
-        gyroscope?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        accelerometer?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+        gyroscope?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
     /** Stoppt die Überwachung der Sensoren. */
     fun stop() {
-        sensorManager.unregisterListener(this)
+        sensorManager?.unregisterListener(this)
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -62,6 +63,8 @@ class MotionDetector(context: Context) : SensorEventListener {
                 val x = event.values[0]
                 val y = event.values[1]
                 val z = event.values[2]
+                // Optimierung: Quadratvergleich statt Wurzel, falls Performance kritisch wird.
+                // Hier bleiben wir bei sqrt für die Lesbarkeit, da SENSOR_DELAY_UI moderat ist.
                 val acceleration = sqrt(x * x + y * y + z * z)
 
                 if (acceleration > Config.ACCELERATION_THRESHOLD) {

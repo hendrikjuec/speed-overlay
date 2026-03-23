@@ -1,13 +1,10 @@
-/*
- * Copyright 2026 Hendrik Jüchter
- */
-
 package com.drgreen.speedoverlay.di
 
 import android.content.Context
-import com.drgreen.speedoverlay.data.LogManager
+import androidx.room.Room
 import com.drgreen.speedoverlay.data.OverpassApi
 import com.drgreen.speedoverlay.data.SettingsManager
+import com.drgreen.speedoverlay.data.SpeedDatabase
 import com.drgreen.speedoverlay.data.SpeedRepository
 import com.drgreen.speedoverlay.logic.OsmParser
 import com.drgreen.speedoverlay.util.HardwareHelper
@@ -22,9 +19,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
 
-/**
- * Hilt Modul zur Bereitstellung von Daten- und Hilfsklassen.
- */
 @Module
 @InstallIn(SingletonComponent::class)
 object DataModule {
@@ -37,14 +31,18 @@ object DataModule {
 
     @Provides
     @Singleton
-    fun provideLogManager(@ApplicationContext context: Context): LogManager {
-        return LogManager(context)
+    fun provideOsmParser(): OsmParser {
+        return OsmParser()
     }
 
     @Provides
     @Singleton
-    fun provideOsmParser(): OsmParser {
-        return OsmParser()
+    fun provideSpeedDatabase(@ApplicationContext context: Context): SpeedDatabase {
+        return Room.databaseBuilder(
+            context,
+            SpeedDatabase::class.java,
+            "speed_database"
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides
@@ -59,8 +57,12 @@ object DataModule {
 
     @Provides
     @Singleton
-    fun provideSpeedRepository(overpassApi: OverpassApi, osmParser: OsmParser): SpeedRepository {
-        return SpeedRepository(overpassApi, osmParser)
+    fun provideSpeedRepository(
+        overpassApi: OverpassApi,
+        osmParser: OsmParser,
+        speedDatabase: SpeedDatabase
+    ): SpeedRepository {
+        return SpeedRepository(overpassApi, osmParser, speedDatabase)
     }
 
     @Provides

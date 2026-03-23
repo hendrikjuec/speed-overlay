@@ -1,56 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- General App Info -->
     <string name="app_name">Speed Overlay</string>
+
+    <!-- Service Controls -->
     <string name="start_service">Start Service</string>
     <string name="stop_service">Stop Service</string>
+    <string name="service_control_group">Service Control</string>
+
+    <!-- Permissions & Onboarding -->
+    <string name="setup_required">Setup Required</string>
+    <string name="onboarding_desc">To show the speed overlay on top of other apps, we need two permissions.</string>
+    <string name="perm_location_title">Location Access</string>
+    <string name="perm_overlay_title">Display Over Apps</string>
+    <string name="perm_grant_button">GRANT</string>
+    <string name="start_app_button">Start App</string>
     <string name="perm_rational">Location and Overlay permissions are required to show current speed over other apps.</string>
 
+    <!-- Main Settings Groups -->
     <string name="settings_title">Settings</string>
     <string name="automation_group">Automation</string>
-    <string name="autostart_bt">Auto-start on Bluetooth</string>
-    <string name="autostart_bt_desc">Start service when connected to car Bluetooth</string>
-    <string name="select_bt_device">Select Bluetooth Device</string>
-    <string name="no_bt_device_selected">No device selected</string>
-    <string name="bt_permission_required">Bluetooth permissions are required to list and monitor devices.</string>
-
-    <string name="autostart_power">Autostart bei Strom</string>
-    <string name="autostart_power_desc">Startet App beim Laden</string>
-
+    <string name="appearance_group">Appearance</string>
     <string name="alerts_group">Alerts &amp; Units</string>
+    <string name="system_group">System</string>
+
+    <!-- Individual Settings -->
+    <string name="autostart_boot">Autostart on Boot</string>
+    <string name="autostart_boot_desc">Start service automatically when the device starts up</string>
     <string name="audio_warning">Audio Warning</string>
     <string name="audio_warning_desc">Play sound when exceeding speed limit</string>
     <string name="use_mph">Use MPH</string>
     <string name="use_mph_desc">Switch units from km/h to mph</string>
     <string name="tolerance_title">Speeding Tolerance</string>
-
-    <string name="appearance_group">Appearance</string>
     <string name="overlay_size">Overlay Size</string>
     <string name="overlay_alpha">Overlay Transparency</string>
-
-    <string name="system_group">System</string>
     <string name="dark_mode">Dark Mode</string>
+    <string name="language">Language</string>
+    <string name="show_speed_cameras">Show Speed Cameras</string>
+
+    <!-- Values & Options -->
     <string name="dark_mode_auto">System</string>
     <string name="dark_mode_off">Light</string>
     <string name="dark_mode_on">Dark</string>
-
-    <string name="language">Language</string>
     <string name="lang_en">English</string>
     <string name="lang_de">Deutsch</string>
     <string name="lang_es">Español</string>
     <string name="lang_fr">Français</string>
     <string name="lang_it">Italiano</string>
 
-    <string name="audio_muted_on">Audio Warnung AUS</string>
-    <string name="audio_muted_off">Audio Warnung AN</string>
+    <!-- Audio Feedback States -->
+    <string name="audio_status_muted">Audio Warning OFF</string>
+    <string name="audio_status_active">Audio Warning ON</string>
 
     <!-- Accessibility Descriptions -->
-    <string name="desc_bluetooth_icon">Bluetooth status</string>
     <string name="desc_notifications_icon">Notification settings</string>
     <string name="desc_speed_icon">Speed and unit settings</string>
     <string name="desc_size_icon">Size settings</string>
     <string name="desc_system_icon">System settings</string>
-    <string name="desc_power_icon">Power connection status</string>
 
-    <!-- Legal -->
+    <!-- Legal & GDPR -->
     <string name="legal_disclaimer_title">Safety &amp; Privacy</string>
     <string name="legal_disclaimer_text">
         <b>Disclaimer:</b>\n
@@ -63,9 +71,17 @@
     <string name="legal_accept">Accept</string>
     <string name="legal_decline">Decline</string>
 
-    <!-- Battery Optimization -->
+    <!-- Battery Optimization Dialog -->
     <string name="battery_opt_title">Battery Optimization</string>
     <string name="battery_opt_message">To ensure accurate speed tracking in the background, please disable battery optimization for this app.</string>
     <string name="battery_opt_ok">Settings</string>
     <string name="battery_opt_cancel">Cancel</string>
+
+    <!-- Overlay States -->
+    <string name="overlay_unlimited">Unlimited</string>
+    <string name="overlay_variable">Variable</string>
+    <string name="overlay_urban">Urban Area</string>
+    <string name="overlay_hazard">Hazard</string>
+    <string name="overlay_camera">Speed Camera</string>
+    <string name="overlay_muted">Muted</string>
 </resources>
