@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <!-- General App Info -->
     <string name="app_name">Speed Overlay</string>
 
@@ -10,12 +10,13 @@
 
     <!-- Permissions & Onboarding -->
     <string name="setup_required">Setup Required</string>
-    <string name="onboarding_desc">To show the speed overlay on top of other apps, we need two permissions.</string>
+    <string name="onboarding_desc">To track speed and show the overlay, we need the following permissions.</string>
     <string name="perm_location_title">Location Access</string>
     <string name="perm_overlay_title">Display Over Apps</string>
+    <string name="perm_notification_title">Notifications</string>
     <string name="perm_grant_button">GRANT</string>
     <string name="start_app_button">Start App</string>
-    <string name="perm_rational">Location and Overlay permissions are required to show current speed over other apps.</string>
+    <string name="perm_rational">Location, Overlay, and Notification permissions are required for the service to function correctly.</string>
 
     <!-- Main Settings Groups -->
     <string name="settings_title">Settings</string>
@@ -26,11 +27,11 @@
 
     <!-- Individual Settings -->
     <string name="autostart_boot">Autostart on Boot</string>
-    <string name="autostart_boot_desc">Start service automatically when the device starts up</string>
+    <string name="autostart_boot_desc">Start service automatically when the device starts up.</string>
     <string name="audio_warning">Audio Warning</string>
-    <string name="audio_warning_desc">Play sound when exceeding speed limit</string>
+    <string name="audio_warning_desc">Play sound when exceeding speed limit.</string>
     <string name="use_mph">Use MPH</string>
-    <string name="use_mph_desc">Switch units from km/h to mph</string>
+    <string name="use_mph_desc">Switch units from km/h to mph.</string>
     <string name="tolerance_title">Speeding Tolerance</string>
     <string name="overlay_size">Overlay Size</string>
     <string name="overlay_alpha">Overlay Transparency</string>
@@ -57,6 +58,8 @@
     <string name="desc_speed_icon">Speed and unit settings</string>
     <string name="desc_size_icon">Size settings</string>
     <string name="desc_system_icon">System settings</string>
+    <string name="desc_play_icon">Start tracking</string>
+    <string name="desc_stop_icon">Stop tracking</string>
 
     <!-- Legal & GDPR -->
     <string name="legal_disclaimer_title">Safety &amp; Privacy</string>
@@ -84,4 +87,9 @@
     <string name="overlay_hazard">Hazard</string>
     <string name="overlay_camera">Speed Camera</string>
     <string name="overlay_muted">Muted</string>
+
+    <!-- Units & Default Values -->
+    <string name="unit_kmh">km/h</string>
+    <string name="unit_mph">mph</string>
+    <string name="default_speed">0</string>
 </resources>

@@ -5,7 +5,6 @@
 package com.drgreen.speedoverlay.ui
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -82,10 +81,12 @@ class MainActivity : AppCompatActivity() {
 
             var hasLocation by remember { mutableStateOf(permissionManager.hasLocationPermission()) }
             var hasOverlay by remember { mutableStateOf(permissionManager.hasOverlayPermission()) }
+            var hasNotification by remember { mutableStateOf(permissionManager.hasNotificationPermission()) }
 
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                 hasLocation = permissionManager.hasLocationPermission()
                 hasOverlay = permissionManager.hasOverlayPermission()
+                hasNotification = permissionManager.hasNotificationPermission()
             }
 
             val isDarkTheme = when (darkModeState) {
@@ -99,13 +100,15 @@ class MainActivity : AppCompatActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (!hasLocation || !hasOverlay) {
+                    if (!hasLocation || !hasOverlay || !hasNotification) {
                         OnboardingScreen(
                             onFinished = { /* State driven */ },
                             onGrantLocation = { permissionManager.requestLocationPermission(this) },
                             onGrantOverlay = { permissionManager.requestOverlayPermission(this) },
+                            onGrantNotification = { permissionManager.requestNotificationPermission(this) },
                             hasLocation = hasLocation,
-                            hasOverlay = hasOverlay
+                            hasOverlay = hasOverlay,
+                            hasNotification = hasNotification
                         )
                     } else {
                         MainScreen(
@@ -122,11 +125,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startSpeedService() {
         val intent = Intent(this, SpeedService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startForegroundService(intent)
     }
 
     private fun stopSpeedService() {
@@ -186,7 +185,10 @@ fun MainScreen(
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = MaterialTheme.shapes.large
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = stringResource(R.string.desc_play_icon)
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.start_service), fontWeight = FontWeight.Bold)
                     }
@@ -195,7 +197,10 @@ fun MainScreen(
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = MaterialTheme.shapes.large
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.desc_stop_icon)
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(R.string.stop_service), fontWeight = FontWeight.Bold)
                     }

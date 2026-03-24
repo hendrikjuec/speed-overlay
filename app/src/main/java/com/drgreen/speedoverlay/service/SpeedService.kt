@@ -11,6 +11,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -25,6 +26,7 @@ import com.drgreen.speedoverlay.logic.OsmParser
 import com.drgreen.speedoverlay.logic.SpeedProcessor
 import com.drgreen.speedoverlay.ui.OverlayManager
 import com.drgreen.speedoverlay.ui.OverlayState
+import com.drgreen.speedoverlay.ui.SpeedWidgetProvider
 import com.drgreen.speedoverlay.util.Config
 import com.drgreen.speedoverlay.util.HardwareHelper
 import com.drgreen.speedoverlay.util.MotionDetector
@@ -44,7 +46,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Foreground service that tracks GPS location, processes speed, and manages the overlay.
+ * Foreground service that tracks GPS location, processes speed, and manages the overlay and widget.
  */
 @AndroidEntryPoint
 class SpeedService : Service() {
@@ -54,9 +56,9 @@ class SpeedService : Service() {
     @Inject lateinit var motionDetector: MotionDetector
     @Inject lateinit var speedRepository: SpeedRepository
 
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
-    private lateinit var overlayManager: OverlayManager
+    private var fusedLocationClient: FusedLocationProviderClient? = null
+    private var locationCallback: LocationCallback? = null
+    private var overlayManager: OverlayManager? = null
     private var toneGenerator: ToneGenerator? = null
 
     private val speedProcessor = SpeedProcessor()
@@ -73,8 +75,9 @@ class SpeedService : Service() {
     private var lastApiLocation: Location? = null
 
     companion object {
-        const val CHANNEL_ID = "SpeedServiceChannel"
+        private const val CHANNEL_ID = "SpeedServiceChannel"
         const val STOP_ACTION = "STOP_SERVICE"
+        private const val NOTIFICATION_ID = 1
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -93,75 +96,72 @@ class SpeedService : Service() {
         overlayManager = OverlayManager(this, settingsManager) { toggleAudioMute() }
 
         createNotificationChannel()
-        startForeground(1, createNotification())
+        startAsForeground()
 
-        overlayManager.show()
+        overlayManager?.show()
         motionDetector.start()
 
         initLocationUpdates()
         observeMotion()
     }
 
-    /**
-     * Observes physical motion to handle standstill detection.
-     */
+    private fun startAsForeground() {
+        val notification = createNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
     private fun observeMotion() {
         serviceScope.launch {
             motionDetector.isMovingFlow.collectLatest { isMoving ->
-                if (!isMoving) updateOverlay(speed = 0)
+                if (!isMoving) updateUI(speed = 0)
             }
         }
     }
 
-    /**
-     * Creates the notification channel required for foreground services.
-     */
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.app_name),
-                NotificationManager.IMPORTANCE_LOW
-            )
-            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.app_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Speed tracking and overlay service"
         }
+        getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    /**
-     * Creates the foreground service notification.
-     */
     private fun createNotification(): Notification {
         val stopIntent = Intent(this, SpeedService::class.java).apply { action = STOP_ACTION }
-        val pendingIntent = PendingIntent.getService(
-            this,
-            1,
-            stopIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+
+        val flag = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+
+        val pendingIntent = PendingIntent.getService(this, 1, stopIntent, flag)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.start_service))
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.stop_service), pendingIntent)
+            .setOngoing(true)
             .build()
     }
 
-    /**
-     * Toggles audio warning mute state temporarily.
-     */
     private fun toggleAudioMute() {
         settingsManager.isAudioMutedTemporary = !settingsManager.isAudioMutedTemporary
-        overlayManager.flash()
+        overlayManager?.flash()
         hardwareHelper.vibrate()
-        // Force an immediate UI update
-        updateOverlay(speedProcessor.lastSpeedKmh.toInt(), isCurrentlySpeeding)
+        updateUI(speedProcessor.lastSpeedKmh.toInt(), isCurrentlySpeeding)
     }
 
-    /**
-     * Initializes FusedLocationProvider for high accuracy updates.
-     */
     @SuppressLint("MissingPermission")
     private fun initLocationUpdates() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
@@ -174,12 +174,9 @@ class SpeedService : Service() {
                 res.locations.lastOrNull()?.let { processLocation(it) }
             }
         }
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, null)
+        fusedLocationClient?.requestLocationUpdates(request, locationCallback!!, null)
     }
 
-    /**
-     * Processes new location data to update speed and check for speed limits.
-     */
     private fun processLocation(location: Location) {
         val speedKmh = location.speed * 3.6f
         val useMph = settingsManager.useMph
@@ -187,32 +184,37 @@ class SpeedService : Service() {
         val smoothedSpeed = speedProcessor.getSmoothedSpeed(location, useMph, motionDetector.isMoving)
         val isSpeeding = speedProcessor.isSpeeding(smoothedSpeed, currentLimit, settingsManager.tolerance)
 
-        updateOverlay(smoothedSpeed, isSpeeding)
+        updateUI(smoothedSpeed, isSpeeding)
         checkSpeedingAlert(isSpeeding)
         checkApiUpdate(location, speedKmh)
     }
 
-    /**
-     * Updates the UI state of the overlay.
-     */
-    private fun updateOverlay(speed: Int, isSpeeding: Boolean = false) {
-        overlayManager.updateState(OverlayState(
+    private fun updateUI(speed: Int, isSpeeding: Boolean = false) {
+        val unit = if (settingsManager.useMph) "mph" else "km/h"
+
+        overlayManager?.updateState(OverlayState(
             currentSpeed = speed,
             speedLimit = currentLimit,
-            unit = if (settingsManager.useMph) "mph" else "km/h",
+            unit = unit,
             isSpeeding = isSpeeding,
             isConfidenceHigh = currentConfidenceHigh,
             showHazard = currentAdditionalInfo.any { it == OsmParser.INFO_HAZARD || it == OsmParser.INFO_SCHOOL },
             showCamera = currentAdditionalInfo.contains(OsmParser.INFO_CAMERA),
             isAudioMuted = !settingsManager.isAudioWarningEnabled || settingsManager.isAudioMutedTemporary
         ))
+
+        SpeedWidgetProvider.updateWidget(
+            context = this,
+            speed = speed,
+            limit = currentLimit,
+            unit = unit,
+            isSpeeding = isSpeeding,
+            isConfidenceHigh = currentConfidenceHigh
+        )
     }
 
-    /**
-     * Plays an audio alert if the user is speeding.
-     */
     private fun checkSpeedingAlert(isSpeeding: Boolean) {
-        if (isSpeeding && currentLimit != null && currentLimit!! > 0) {
+        if (isSpeeding && (currentLimit ?: 0) > 0) {
             if (!isCurrentlySpeeding && settingsManager.isAudioWarningEnabled && !settingsManager.isAudioMutedTemporary) {
                 toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
             }
@@ -220,9 +222,6 @@ class SpeedService : Service() {
         isCurrentlySpeeding = isSpeeding
     }
 
-    /**
-     * Throttles API calls for speed limit updates based on distance and speed.
-     */
     private fun checkApiUpdate(location: Location, speedKmh: Float) {
         val time = System.currentTimeMillis()
         val dist = lastApiLocation?.distanceTo(location) ?: Float.MAX_VALUE
@@ -237,9 +236,6 @@ class SpeedService : Service() {
         }
     }
 
-    /**
-     * Fetches the current speed limit from the repository.
-     */
     private fun fetchSpeedLimit(location: Location) {
         serviceScope.launch {
             val speedKmh = location.speed * 3.6f
@@ -255,8 +251,7 @@ class SpeedService : Service() {
                 currentLimit = result.data
                 currentAdditionalInfo = result.additionalInfo
                 currentConfidenceHigh = result.isConfidenceHigh
-                // Update overlay with new limit info
-                updateOverlay(speedProcessor.lastSpeedKmh.toInt(), isCurrentlySpeeding)
+                updateUI(speedProcessor.lastSpeedKmh.toInt(), isCurrentlySpeeding)
             }
         }
     }
@@ -265,11 +260,9 @@ class SpeedService : Service() {
         super.onDestroy()
         serviceScope.cancel()
         toneGenerator?.release()
-        overlayManager.hide()
-        overlayManager.release()
+        overlayManager?.hide()
+        overlayManager?.release()
         motionDetector.stop()
-        if (::fusedLocationClient.isInitialized) {
-            fusedLocationClient.removeLocationUpdates(locationCallback)
-        }
+        locationCallback?.let { fusedLocationClient?.removeLocationUpdates(it) }
     }
 }

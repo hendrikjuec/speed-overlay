@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,33 +33,38 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.drgreen.speedoverlay.R
 
 /**
  * Onboarding screen that handles initial permission requests.
- * Shown when the app lacks location or overlay permissions.
+ * Shown when the app lacks location, overlay, or notification permissions.
  *
  * @param onFinished Callback when all permissions are granted and user clicks "Start App".
  * @param onGrantLocation Action to request location permission.
  * @param onGrantOverlay Action to request overlay permission.
+ * @param onGrantNotification Action to request notification permission.
  * @param hasLocation Current status of location permission.
  * @param hasOverlay Current status of overlay permission.
+ * @param hasNotification Current status of notification permission.
  */
 @Composable
 fun OnboardingScreen(
     onFinished: () -> Unit,
     onGrantLocation: () -> Unit,
     onGrantOverlay: () -> Unit,
+    onGrantNotification: () -> Unit,
     hasLocation: Boolean,
-    hasOverlay: Boolean
+    hasOverlay: Boolean,
+    hasNotification: Boolean
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -74,7 +82,7 @@ fun OnboardingScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         PermissionItem(
             title = stringResource(R.string.perm_location_title),
@@ -83,7 +91,7 @@ fun OnboardingScreen(
             icon = Icons.Default.LocationOn
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         PermissionItem(
             title = stringResource(R.string.perm_overlay_title),
@@ -92,9 +100,18 @@ fun OnboardingScreen(
             icon = Icons.Default.Warning
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        PermissionItem(
+            title = stringResource(R.string.perm_notification_title),
+            isGranted = hasNotification,
+            onClick = onGrantNotification,
+            icon = Icons.Default.Notifications
+        )
+
         Spacer(modifier = Modifier.height(48.dp))
 
-        if (hasLocation && hasOverlay) {
+        if (hasLocation && hasOverlay && hasNotification) {
             Button(
                 onClick = onFinished,
                 modifier = Modifier.fillMaxWidth().height(56.dp)
@@ -130,15 +147,39 @@ fun PermissionItem(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(imageVector = icon, contentDescription = null)
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             if (isGranted) {
                 Icon(Icons.Default.Check, contentDescription = null)
             } else {
-                Text(stringResource(R.string.perm_grant_button), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = stringResource(R.string.perm_grant_button),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.background(
+                        color = Color.Black.copy(alpha = 0.1f),
+                        shape = MaterialTheme.shapes.small
+                    ).padding(horizontal = 8.dp, vertical = 4.dp)
+                )
             }
         }
     }

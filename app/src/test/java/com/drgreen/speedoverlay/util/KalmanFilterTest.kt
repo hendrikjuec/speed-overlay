@@ -28,7 +28,7 @@ class KalmanFilterTest {
     fun testNoiseReduction() {
         val filter = KalmanFilter(processNoise = 0.05f, measurementNoise = 1.0f)
 
-        val first = filter.filter(10f)
+        filter.filter(10f)
         val second = filter.filter(100f) // Starker Sprung
 
         // Der Filter sollte den Sprung massiv dämpfen
