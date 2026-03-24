@@ -2,21 +2,26 @@
     <string name="app_name">Speed Overlay</string>
     <string name="start_service">Dienst starten</string>
     <string name="stop_service">Dienst stoppen</string>
-    <string name="perm_rational">Standort- und Overlay-Berechtigungen sind erforderlich, um die aktuelle Geschwindigkeit über anderen Apps anzuzeigen.</string>
+    <string name="service_control_group">Dienst-Steuerung</string>
+    <string name="setup_required">Einrichtung erforderlich</string>
+    <string name="onboarding_desc">Um die Geschwindigkeit zu messen und das Overlay anzuzeigen, benötigen wir folgende Berechtigungen.</string>
+    <string name="perm_location_title">Standort-Zugriff</string>
+    <string name="perm_overlay_title">Über anderen Apps anzeigen</string>
+    <string name="perm_notification_title">Benachrichtigungen</string>
+    <string name="perm_grant_button">ZULASSEN</string>
+    <string name="start_app_button">App starten</string>
+    <string name="perm_rational">Standort-, Overlay- und Benachrichtigungs-Berechtigungen sind erforderlich, damit der Dienst korrekt funktioniert.</string>
 
     <string name="settings_title">Einstellungen</string>
     <string name="automation_group">Automatisierung</string>
-    <string name="autostart_bt">Auto-Start bei Bluetooth</string>
-    <string name="autostart_bt_desc">Dienst starten, wenn mit Fahrzeug-Bluetooth verbunden</string>
-    <string name="select_bt_device">Bluetooth-Gerät wählen</string>
-    <string name="no_bt_device_selected">Kein Gerät gewählt</string>
-    <string name="bt_permission_required">Bluetooth-Berechtigungen sind erforderlich, um Geräte aufzulisten.</string>
+    <string name="autostart_boot">Autostart bei Boot</string>
+    <string name="autostart_boot_desc">Dienst automatisch beim Gerätestart ausführen.</string>
 
     <string name="alerts_group">Warnungen &amp; Einheiten</string>
     <string name="audio_warning">Akustische Warnung</string>
-    <string name="audio_warning_desc">Ton abspielen bei Überschreitung des Limits</string>
+    <string name="audio_warning_desc">Ton abspielen bei Überschreitung des Limits.</string>
     <string name="use_mph">Meilen (MPH) nutzen</string>
-    <string name="use_mph_desc">Einheiten von km/h auf mph umstellen</string>
+    <string name="use_mph_desc">Einheiten von km/h auf mph umstellen.</string>
     <string name="tolerance_title">Geschwindigkeits-Toleranz</string>
     <string name="show_speed_cameras">Blitzer anzeigen</string>
 
@@ -37,12 +42,16 @@
     <string name="lang_fr">Français</string>
     <string name="lang_it">Italiano</string>
 
+    <string name="audio_status_muted">Akustische Warnung AUS</string>
+    <string name="audio_status_active">Akustische Warnung AN</string>
+
     <!-- Accessibility Descriptions -->
-    <string name="desc_bluetooth_icon">Bluetooth-Status</string>
     <string name="desc_notifications_icon">Benachrichtigungs-Einstellungen</string>
     <string name="desc_speed_icon">Geschwindigkeits-Einstellungen</string>
     <string name="desc_size_icon">Größen-Einstellungen</string>
     <string name="desc_system_icon">System-Einstellungen</string>
+    <string name="desc_play_icon">Tracking starten</string>
+    <string name="desc_stop_icon">Tracking stoppen</string>
 
     <!-- Rechtliches -->
     <string name="legal_disclaimer_title">Sicherheit &amp; Datenschutz</string>
@@ -59,7 +68,7 @@
 
     <!-- Battery Optimization -->
     <string name="battery_opt_title">Akku-Optimierung</string>
-    <string name="battery_opt_message">Um eine genaue Geschwindigkeitsmessung im Hintergrund zu gewährleisten, deaktivieren Sie bitte die Akku-Optimierung für diese App.</string>
+    <string name="battery_opt_message">Um eine genaue Geschwindigkeitsmessung im Hintergrund zu gewährleisten, bitte deaktivieren Sie die Akku-Optimierung für diese App.</string>
     <string name="battery_opt_ok">Einstellungen</string>
     <string name="battery_opt_cancel">Abbrechen</string>
 

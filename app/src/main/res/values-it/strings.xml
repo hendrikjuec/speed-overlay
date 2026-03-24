@@ -6,11 +6,6 @@
 
     <string name="settings_title">Impostazioni</string>
     <string name="automation_group">Automazione</string>
-    <string name="autostart_bt">Avvio automatico con Bluetooth</string>
-    <string name="autostart_bt_desc">Avvia il servizio quando connesso al Bluetooth dell\'auto</string>
-    <string name="select_bt_device">Seleziona dispositivo Bluetooth</string>
-    <string name="no_bt_device_selected">Nessun dispositivo selezionato</string>
-    <string name="bt_permission_required">Le autorizzazioni Bluetooth sono necessarie per elencare e monitorare i dispositivi.</string>
 
     <string name="alerts_group">Avvisi e Unità</string>
     <string name="audio_warning">Avviso sonoro</string>
@@ -38,7 +33,6 @@
     <string name="lang_it">Italiano</string>
 
     <!-- Accessibility Descriptions -->
-    <string name="desc_bluetooth_icon">Stato Bluetooth</string>
     <string name="desc_notifications_icon">Impostazioni notifiche</string>
     <string name="desc_speed_icon">Impostazioni velocità e unità</string>
     <string name="desc_size_icon">Impostazioni dimensione</string>

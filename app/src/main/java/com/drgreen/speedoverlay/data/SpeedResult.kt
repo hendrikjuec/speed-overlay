@@ -11,5 +11,4 @@ sealed class SpeedResult<out T> {
         val isConfidenceHigh: Boolean = false
     ) : SpeedResult<T>()
     data class Error(val message: String, val exception: Exception? = null) : SpeedResult<Nothing>()
-    object Loading : SpeedResult<Nothing>()
 }

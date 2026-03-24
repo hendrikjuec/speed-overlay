@@ -1,43 +1,42 @@
 # Speed Overlay
 
-Ein intelligentes Android-Overlay, das das aktuelle Tempolimit basierend auf OpenStreetMap-Daten anzeigt.
+Ein intelligentes Android-Overlay und Widget, das das aktuelle Tempolimit basierend auf OpenStreetMap-Daten anzeigt. Optimiert für modernste Android-Versionen (14, 15 & 16).
 
 ## Features
-- **Echtzeit-Anzeige**: Überlagert Navigations-Apps wie Google Maps.
-- **OSM-Integration**: Erkennt Tempolimits basierend auf GPS-Koordinaten und OSM-Tags.
-- **Sprachumschaltung**: Unterstützung für Deutsch, Englisch, Spanisch, Französisch und Italienisch. Die App nutzt moderne Android-APIs (LocaleConfig) für konsistente Lokalisierung.
-- **EU-Regelwerk**: Implementiert implizite Tempolimits für alle EU-Mitgliedstaaten (z.B. 100 km/h auf deutschen Landstraßen, 80 km/h in Frankreich).
-- **Intelligente Warnung**: Akustische und visuelle Warnungen bei Überschreitung (einstellbare Toleranz).
-- **Automatisierung**:
-    - **Bluetooth-Autostart**: Startet den Dienst automatisch bei Verbindung mit einem spezifischen, in den Einstellungen ausgewählten Bluetooth-Gerät.
-    - **Strom-Autostart**: Startet die App automatisch beim Anschließen an eine Stromquelle.
-- **Notification-Control**: Schnelles Stoppen des Dienstes direkt über die Benachrichtigung (optimiert für Android 13+).
-- **Dark Mode**: Volle Unterstützung für systemweiten Dunkelmodus.
+- **Echtzeit-Overlay**: Überlagert Navigations-Apps wie Google Maps mit aktueller Geschwindigkeit und Limit.
+- **Home-Screen Widget**: Konsistente Anzeige von Geschwindigkeit und Schildern direkt auf dem Launcher.
+- **Intelligente OSM-Analyse**:
+    - Erkennt explizite Schilder (maxspeed).
+    - Berücksichtigt Zonen (30er Zonen, Spielstraßen).
+    - Implementiert implizite Regeln (z.B. 50 innerorts, 100 außerorts in DE).
+- **Visuelle Logik (Schilder)**:
+    - **Roter Rand**: Verifiziertes Limit (Schilder erkannt).
+    - **Grauer Rand**: Vermutetes Limit basierend auf Straßentyp (Confidence-Logik).
+    - **Sonder-Icons**: Korrekte Darstellung für Unbegrenzt (Schild 282), Variable Limits und Innerorts (Haus-Icon).
+- **Warnsystem**: Pulsierendes Overlay und akustische Beeps bei Überschreitung (einstellbare Toleranz).
+- **Automatisierung**: Autostart bei Bluetooth-Verbindung, Stromzufuhr oder Geräteneustart.
+- **Multilingual**: Volle Unterstützung für DE, EN, ES, FR, IT (inkl. In-App Language Switching).
 
-## Architektur
-- **Jetpack Compose**: Moderne UI-Entwicklung.
-- **AppCompat & DataStore**: Kombinierte Nutzung von `AppCompatDelegate` für Lokalisierung und Jetpack DataStore für Persistenz.
-- **Hilt**: Dependency Injection für saubere Testbarkeit.
-- **Service-Based**: Hintergrunddienst für stabilen Betrieb während der Navigation.
+## Architektur & Tech-Stack
+- **Jetpack Compose**: Deklarative UI für Overlay und Einstellungen.
+- **Foreground Service**: Stabiler Hintergrundbetrieb mit Android 14+ `location` Typ-Deklaration.
+- **Kalman-Filter**: Hochpräzise Geschwindigkeitsglättung zur Vermeidung von GPS-Jitter.
+- **Hilt & Room**: Saubere Dependency Injection und effizientes Offline-Caching von Straßendaten.
+- **DataStore**: Reaktive Einstellungsverwaltung.
 
-## Berechtigungen
-Die App benötigt folgende Berechtigungen für den vollen Funktionsumfang:
-- **Standort**: Zur Bestimmung der Position und des Tempolimits.
-- **Overlay**: Zum Anzeigen der Geschwindigkeit über anderen Apps.
-- **Bluetooth**: Für die Geräteauswahl beim Autostart (ab Android 12).
-- **Benachrichtigungen**: Für die Dienst-Steuerung (ab Android 13).
+## Berechtigungen (Onboarding)
+Die App führt den Nutzer durch ein sicheres Setup für:
+- **Standort (Fein)**: Zwingend für die Geschwindigkeitsberechnung.
+- **Overlay**: Erlaubt die Anzeige über anderen Apps.
+- **Benachrichtigungen**: Erforderlich ab Android 13 für den Dienst-Status.
+- **Akku-Optimierung**: Optional, empfohlen für unterbrechungsfreies Tracking.
 
-## Installation & Tests
-Führen Sie die Unit-Tests mit Gradle aus:
+## Entwicklung & Tests
+Die Codebasis ist "Lint-clean" und für API 36 optimiert.
+Unit-Tests decken den Algorithmus, das Repository und die UI-Provider ab:
 ```bash
-./gradlew test
-```
-
-Um spezifische Tests für die Einstellungen, Bluetooth-Logik und Lokalisierung auszuführen:
-```bash
-./gradlew :app:testDebugUnitTest --tests "com.drgreen.speedoverlay.data.SettingsManagerTest"
-./gradlew :app:testDebugUnitTest --tests "com.drgreen.speedoverlay.service.BluetoothReceiverTest"
+./gradlew testDebugUnitTest
 ```
 
 ## Rechtliches
-Die Nutzung erfolgt auf eigene Gefahr. Die App ersetzt nicht den aufmerksamen Blick auf echte Verkehrsschilder.
+Die Nutzung erfolgt auf eigene Gefahr. Tempolimits basieren auf OSM-Daten und können von der Realität abweichen. Achten Sie immer auf physische Verkehrszeichen.

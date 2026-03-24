@@ -42,7 +42,7 @@ object DataModule {
             context,
             SpeedDatabase::class.java,
             "speed_database"
-        ).fallbackToDestructiveMigration().build()
+        ).fallbackToDestructiveMigration(dropAllTables = true).build()
     }
 
     @Provides
