@@ -18,8 +18,10 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 /**
@@ -50,8 +52,15 @@ object DataModule {
     @Provides
     @Singleton
     fun provideOverpassApi(): OverpassApi {
+        val httpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
+            .build()
+
         return Retrofit.Builder()
             .baseUrl("https://overpass-api.de/api/")
+            .client(httpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(OverpassApi::class.java)

@@ -10,6 +10,7 @@ import android.content.Context.SENSOR_SERVICE
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.sqrt
@@ -55,29 +56,41 @@ class MotionDetector(context: Context) : SensorEventListener {
         sensorManager.unregisterListener(this)
     }
 
-    override fun onSensorChanged(event: SensorEvent) {
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null || event.sensor == null) return
+        if (event.values.size < 3) {
+            Log.w("MotionDetector", "Invalid sensor event values size: ${event.values.size}")
+            return
+        }
+
         val now = System.currentTimeMillis()
-        when (event.sensor.type) {
-            Sensor.TYPE_LINEAR_ACCELERATION -> {
-                val x = event.values[0]
-                val y = event.values[1]
-                val z = event.values[2]
-                val acceleration = sqrt(x * x + y * y + z * z)
+        try {
+            when (event.sensor.type) {
+                Sensor.TYPE_LINEAR_ACCELERATION -> {
+                    val x = event.values[0]
+                    val y = event.values[1]
+                    val z = event.values[2]
+                    val acceleration = sqrt(x * x + y * y + z * z)
 
-                if (acceleration > Config.ACCELERATION_THRESHOLD) {
-                    updateMotion(now)
+                    if (acceleration > Config.ACCELERATION_THRESHOLD) {
+                        updateMotion(now)
+                    }
+                }
+                Sensor.TYPE_GYROSCOPE -> {
+                    val x = event.values[0]
+                    val y = event.values[1]
+                    val z = event.values[2]
+                    val rotation = sqrt(x * x + y * y + z * z)
+
+                    if (rotation > Config.GYRO_THRESHOLD) {
+                        updateMotion(now)
+                    }
                 }
             }
-            Sensor.TYPE_GYROSCOPE -> {
-                val x = event.values[0]
-                val y = event.values[1]
-                val z = event.values[2]
-                val rotation = sqrt(x * x + y * y + z * z)
-
-                if (rotation > Config.GYRO_THRESHOLD) {
-                    updateMotion(now)
-                }
-            }
+        } catch (e: IndexOutOfBoundsException) {
+            Log.e("MotionDetector", "IndexOutOfBoundsException in onSensorChanged", e)
+        } catch (e: Exception) {
+            Log.e("MotionDetector", "Unexpected error in onSensorChanged", e)
         }
     }
 

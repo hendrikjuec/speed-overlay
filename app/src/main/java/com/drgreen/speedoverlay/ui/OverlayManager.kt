@@ -26,6 +26,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import android.util.Log
 import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
@@ -61,48 +62,62 @@ class OverlayManager(
     fun show() {
         if (composeView != null) return
 
-        composeView = ComposeView(context).apply {
-            // Notwendige Owner für Compose setzen
-            setViewTreeLifecycleOwner(this@OverlayManager)
-            setViewTreeViewModelStoreOwner(this@OverlayManager)
-            setViewTreeSavedStateRegistryOwner(this@OverlayManager)
+        try {
+            composeView = ComposeView(context).apply {
+                // Notwendige Owner für Compose setzen
+                setViewTreeLifecycleOwner(this@OverlayManager)
+                setViewTreeViewModelStoreOwner(this@OverlayManager)
+                setViewTreeSavedStateRegistryOwner(this@OverlayManager)
 
-            setContent {
-                val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
-                val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
-                val color by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
+                setContent {
+                    val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
+                    val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
+                    val color by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
 
-                overlayState.value?.let { state ->
-                    OverlayScreen(
-                        state = state,
-                        scale = size,
-                        alpha = alpha,
-                        textColor = color
-                    )
+                    overlayState.value?.let { state ->
+                        OverlayScreen(
+                            state = state,
+                            scale = size,
+                            alpha = alpha,
+                            textColor = color
+                        )
+                    }
                 }
             }
+
+            params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = settings.overlayX
+                y = settings.overlayY
+            }
+
+            composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
+
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            windowManager.addView(composeView, params)
+        } catch (e: WindowManager.BadTokenException) {
+            Log.e("OverlayManager", "BadToken: Window token invalid on Android 9 Head Unit", e)
+            composeView = null
+        } catch (e: SecurityException) {
+            Log.e("OverlayManager", "SecurityException: SYSTEM_ALERT_WINDOW permission issue", e)
+            composeView = null
+        } catch (e: RuntimeException) {
+            Log.e("OverlayManager", "RuntimeException: Failed to show overlay", e)
+            composeView = null
+        } catch (e: Exception) {
+            Log.e("OverlayManager", "Unexpected error in show()", e)
+            composeView = null
         }
-
-        params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = settings.overlayX
-            y = settings.overlayY
-        }
-
-        composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
-
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        windowManager.addView(composeView, params)
     }
 
     /** Aktualisiert die anzuzeigenden Daten (Geschwindigkeit, Limit etc.). */
