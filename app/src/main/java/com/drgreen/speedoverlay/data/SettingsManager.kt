@@ -58,12 +58,14 @@ class SettingsManager(private val context: Context) {
         val OVERLAY_Y = intPreferencesKey("overlay_y")
         val DARK_MODE = intPreferencesKey("dark_mode")
         val LANGUAGE = stringPreferencesKey("language")
+        val DEBUG_MODE = booleanPreferencesKey("debug_mode")
 
         const val DEFAULT_TOLERANCE = 5
     }
 
     // --- Flows ---
     val autostartBootFlow = prefsState.map { it[AUTOSTART_BOOT] ?: false }.distinctUntilChanged()
+    val debugModeFlow = prefsState.map { it[DEBUG_MODE] ?: false }.distinctUntilChanged()
     val toleranceFlow = prefsState.map { it[TOLERANCE] ?: DEFAULT_TOLERANCE }.distinctUntilChanged()
     val useMphFlow = prefsState.map { it[UNIT_MPH] ?: false }.distinctUntilChanged()
     val audioWarningFlow = prefsState.map { it[AUDIO_WARNING] ?: true }.distinctUntilChanged()
@@ -140,6 +142,10 @@ class SettingsManager(private val context: Context) {
             update(LANGUAGE, value)
             applyLanguage(value)
         }
+
+    var isDebugModeEnabled: Boolean
+        get() = prefsState.value[DEBUG_MODE] ?: false
+        set(value) = update(DEBUG_MODE, value)
 
     private fun <T> update(key: Preferences.Key<T>, value: T) {
         scope.launch { dataStore.edit { it[key] = value } }

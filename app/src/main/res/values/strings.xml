@@ -92,4 +92,13 @@
     <string name="unit_kmh">km/h</string>
     <string name="unit_mph">mph</string>
     <string name="default_speed">0</string>
+
+    <!-- Debugging -->
+    <string name="debug_group">Debugging &amp; Support</string>
+    <string name="debug_mode">Debug Modus</string>
+    <string name="debug_mode_desc">Aktiviert erweitertes Logging für Head Units</string>
+    <string name="export_logs">Debug-Logs exportieren</string>
+    <string name="clear_logs">Logs löschen</string>
+    <string name="logs_exported">Logs exportiert nach: %s</string>
+    <string name="logs_cleared">Debug-Logs gelöscht</string>
 </resources>

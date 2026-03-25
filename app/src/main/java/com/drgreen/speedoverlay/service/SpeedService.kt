@@ -17,8 +17,10 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.drgreen.speedoverlay.R
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.data.SpeedRepository
 import com.drgreen.speedoverlay.data.SpeedResult
@@ -47,11 +49,13 @@ import javax.inject.Inject
 
 /**
  * Foreground service that tracks GPS location, processes speed, and manages the overlay and widget.
+ * Optimized with robust error handling for Android 9+ Head Units.
  */
 @AndroidEntryPoint
 class SpeedService : Service() {
 
     @Inject lateinit var settingsManager: SettingsManager
+    @Inject lateinit var logManager: LogManager
     @Inject lateinit var hardwareHelper: HardwareHelper
     @Inject lateinit var motionDetector: MotionDetector
     @Inject lateinit var speedRepository: SpeedRepository
@@ -93,28 +97,61 @@ class SpeedService : Service() {
     override fun onCreate() {
         super.onCreate()
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-        overlayManager = OverlayManager(this, settingsManager) { toggleAudioMute() }
+        overlayManager = OverlayManager(this, settingsManager, logManager) { toggleAudioMute() }
 
-        createNotificationChannel()
-        startAsForeground()
+        if (settingsManager.isDebugModeEnabled) {
+            logManager.logDebug("SpeedService: onCreate started")
+        }
 
-        overlayManager?.show()
-        motionDetector.start()
+        try {
+            createNotificationChannel()
+            startAsForeground()
+        } catch (e: Exception) {
+            Log.e("SpeedService", "Failed to start foreground service", e)
+            logManager.logDebug("SpeedService: Failed to start foreground service", e)
+            stopSelf()
+            return
+        }
 
-        initLocationUpdates()
-        observeMotion()
+        try {
+            overlayManager?.show()
+            motionDetector.start()
+
+            initLocationUpdates()
+            observeMotion()
+
+            if (settingsManager.isDebugModeEnabled) {
+                logManager.logDebug("SpeedService: Initialization complete")
+            }
+        } catch (e: Exception) {
+            Log.e("SpeedService", "Failed to initialize service components", e)
+            logManager.logDebug("SpeedService: Failed to initialize components", e)
+            stopSelf()
+        }
     }
 
     private fun startAsForeground() {
         val notification = createNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        if (notification == null) {
+            Log.e("SpeedService", "Failed to create notification")
+            logManager.logDebug("SpeedService: Notification creation failed")
+            throw RuntimeException("Notification creation failed")
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("SpeedService", "Error in startForeground", e)
+            logManager.logDebug("SpeedService: Error in startForeground", e)
+            throw e
         }
     }
 
@@ -127,32 +164,55 @@ class SpeedService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.app_name),
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Speed tracking and overlay service"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val notificationManager = getSystemService(NotificationManager::class.java)
+                if (notificationManager != null) {
+                    val channel = NotificationChannel(
+                        CHANNEL_ID,
+                        getString(R.string.app_name),
+                        NotificationManager.IMPORTANCE_LOW
+                    ).apply {
+                        description = "Speed tracking and overlay service"
+                    }
+                    notificationManager.createNotificationChannel(channel)
+                } else {
+                    Log.w("SpeedService", "NotificationManager is null")
+                    logManager.logDebug("SpeedService: NotificationManager is null")
+                }
+            } catch (e: Exception) {
+                Log.e("SpeedService", "Failed to create notification channel", e)
+                logManager.logDebug("SpeedService: Failed to create notification channel", e)
+            }
         }
-        getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    private fun createNotification(): Notification {
-        val stopIntent = Intent(this, SpeedService::class.java).apply { action = STOP_ACTION }
+    private fun createNotification(): Notification? {
+        return try {
+            val stopIntent = Intent(this, SpeedService::class.java).apply { action = STOP_ACTION }
 
-        val flag = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
 
-        val pendingIntent = PendingIntent.getService(this, 1, stopIntent, flag)
+            val pendingIntent = PendingIntent.getService(this, 1, stopIntent, flag)
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.start_service))
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.stop_service), pendingIntent)
-            .setOngoing(true)
-            .build()
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(getString(R.string.app_name))
+                .setContentText(getString(R.string.start_service))
+                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.stop_service), pendingIntent)
+                .setOngoing(true)
+                .build()
+        } catch (e: Exception) {
+            Log.e("SpeedService", "Failed to build notification", e)
+            logManager.logDebug("SpeedService: Failed to build notification", e)
+            null
+        }
     }
 
     private fun toggleAudioMute() {
@@ -164,17 +224,27 @@ class SpeedService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun initLocationUpdates() {
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, Config.LOCATION_UPDATE_INTERVAL_MS)
-            .setMinUpdateIntervalMillis(Config.LOCATION_MIN_UPDATE_INTERVAL_MS)
-            .build()
+        try {
+            fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, Config.LOCATION_UPDATE_INTERVAL_MS)
+                .setMinUpdateIntervalMillis(Config.LOCATION_MIN_UPDATE_INTERVAL_MS)
+                .build()
 
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(res: LocationResult) {
-                res.locations.lastOrNull()?.let { processLocation(it) }
+            locationCallback = object : LocationCallback() {
+                override fun onLocationResult(res: LocationResult) {
+                    if (res.locations.isNotEmpty()) {
+                        res.lastLocation?.let { processLocation(it) }
+                    }
+                }
             }
+            fusedLocationClient?.requestLocationUpdates(request, locationCallback ?: return, null)
+        } catch (e: SecurityException) {
+            Log.e("SpeedService", "SecurityException: Location permission missing at runtime", e)
+            logManager.logDebug("SpeedService: Location permission missing at runtime", e)
+        } catch (e: Exception) {
+            Log.e("SpeedService", "Unexpected error in initLocationUpdates", e)
+            logManager.logDebug("SpeedService: Unexpected error in initLocationUpdates", e)
         }
-        fusedLocationClient?.requestLocationUpdates(request, locationCallback!!, null)
     }
 
     private fun processLocation(location: Location) {

@@ -6,6 +6,7 @@ package com.drgreen.speedoverlay.ui
 
 import android.content.Context
 import android.view.WindowManager
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import io.mockk.*
 import org.junit.Assert.assertNotNull
@@ -20,6 +21,7 @@ class OverlayManagerTest {
 
     private lateinit var context: Context
     private lateinit var settingsManager: SettingsManager
+    private lateinit var logManager: LogManager
     private lateinit var overlayManager: OverlayManager
     private val windowManager = mockk<WindowManager>(relaxed = true)
 
@@ -29,7 +31,8 @@ class OverlayManagerTest {
         every { context.getSystemService(Context.WINDOW_SERVICE) } returns windowManager
 
         settingsManager = SettingsManager(context)
-        overlayManager = OverlayManager(context, settingsManager) { }
+        logManager = mockk(relaxed = true)
+        overlayManager = OverlayManager(context, settingsManager, logManager) { }
     }
 
     @Test

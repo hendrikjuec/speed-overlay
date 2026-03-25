@@ -8,6 +8,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -27,19 +28,23 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 
 /**
  * Manages the floating overlay window using Jetpack Compose.
  * Uses reactive flows from SettingsManager for immediate UI updates when settings change.
+ * Optimized with robust error handling for Android 9+ Head Units.
  *
  * @property context The application context.
  * @property settings The settings manager for reactive configuration.
+ * @property logManager The log manager for debug logging.
  * @property onLongClick Callback triggered when the overlay is long-pressed.
  */
 class OverlayManager(
     private val context: Context,
     private val settings: SettingsManager,
+    private val logManager: LogManager,
     private val onLongClick: () -> Unit
 ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -68,48 +73,74 @@ class OverlayManager(
     fun show() {
         if (composeView != null) return
 
-        composeView = ComposeView(context).apply {
-            // Set required owners for Compose
-            setViewTreeLifecycleOwner(this@OverlayManager)
-            setViewTreeViewModelStoreOwner(this@OverlayManager)
-            setViewTreeSavedStateRegistryOwner(this@OverlayManager)
+        if (settings.isDebugModeEnabled) {
+            logManager.logDebug("OverlayManager: Attempting to show overlay")
+        }
 
-            setContent {
-                val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
-                val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
-                val colorInt by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
+        try {
+            composeView = ComposeView(context).apply {
+                // Set required owners for Compose
+                setViewTreeLifecycleOwner(this@OverlayManager)
+                setViewTreeViewModelStoreOwner(this@OverlayManager)
+                setViewTreeSavedStateRegistryOwner(this@OverlayManager)
 
-                overlayState.value?.let { state ->
-                    OverlayScreen(
-                        state = state,
-                        scale = size,
-                        alpha = alpha,
-                        textColor = Color(colorInt)
-                    )
+                setContent {
+                    val size by settings.overlaySizeFlow.collectAsState(initial = settings.overlaySize)
+                    val alpha by settings.overlayAlphaFlow.collectAsState(initial = settings.overlayAlpha)
+                    val colorInt by settings.overlayTextColorFlow.collectAsState(initial = settings.overlayTextColor)
+
+                    overlayState.value?.let { state ->
+                        OverlayScreen(
+                            state = state,
+                            scale = size,
+                            alpha = alpha,
+                            textColor = Color(colorInt)
+                        )
+                    }
                 }
             }
+
+            params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_PHONE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = settings.overlayX
+                y = settings.overlayY
+            }
+
+            composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
+
+            lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+            windowManager.addView(composeView, params)
+
+            if (settings.isDebugModeEnabled) {
+                logManager.logDebug("OverlayManager: Overlay successfully added to window manager")
+            }
+        } catch (e: WindowManager.BadTokenException) {
+            Log.e("OverlayManager", "BadToken: Window token invalid on Android 9 Head Unit", e)
+            logManager.logDebug("OverlayManager: BadTokenException", e)
+            composeView = null
+        } catch (e: SecurityException) {
+            Log.e("OverlayManager", "SecurityException: SYSTEM_ALERT_WINDOW permission issue", e)
+            logManager.logDebug("OverlayManager: SecurityException", e)
+            composeView = null
+        } catch (e: RuntimeException) {
+            Log.e("OverlayManager", "RuntimeException: Failed to show overlay", e)
+            logManager.logDebug("OverlayManager: RuntimeException", e)
+            composeView = null
+        } catch (e: Exception) {
+            Log.e("OverlayManager", "Unexpected error in show()", e)
+            logManager.logDebug("OverlayManager: Unexpected error in show()", e)
+            composeView = null
         }
-
-        params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = settings.overlayX
-            y = settings.overlayY
-        }
-
-        composeView?.setOnTouchListener(OverlayTouchListener(windowManager, composeView!!, params, settings, onLongClick))
-
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        windowManager.addView(composeView, params)
     }
 
     /**

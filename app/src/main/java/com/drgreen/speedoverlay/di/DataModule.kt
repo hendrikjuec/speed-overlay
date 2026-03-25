@@ -2,6 +2,7 @@ package com.drgreen.speedoverlay.di
 
 import android.content.Context
 import androidx.room.Room
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.OverpassApi
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.data.SpeedDatabase
@@ -22,6 +23,12 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DataModule {
+
+    @Provides
+    @Singleton
+    fun provideLogManager(@ApplicationContext context: Context): LogManager {
+        return LogManager(context)
+    }
 
     @Provides
     @Singleton

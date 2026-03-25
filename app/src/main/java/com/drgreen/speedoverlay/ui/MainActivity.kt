@@ -5,42 +5,23 @@
 package com.drgreen.speedoverlay.ui
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -49,16 +30,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.drgreen.speedoverlay.R
+import com.drgreen.speedoverlay.data.LogManager
 import com.drgreen.speedoverlay.data.SettingsManager
 import com.drgreen.speedoverlay.service.SpeedService
-import com.drgreen.speedoverlay.ui.components.OnboardingScreen
-import com.drgreen.speedoverlay.ui.components.SettingDarkMode
-import com.drgreen.speedoverlay.ui.components.SettingLanguage
-import com.drgreen.speedoverlay.ui.components.SettingSlider
-import com.drgreen.speedoverlay.ui.components.SettingSwitch
-import com.drgreen.speedoverlay.ui.components.SettingsCard
+import com.drgreen.speedoverlay.ui.components.*
+import com.drgreen.speedoverlay.util.CrashReporter
 import com.drgreen.speedoverlay.util.PermissionManager
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import javax.inject.Inject
 
 /**
@@ -69,10 +48,15 @@ import javax.inject.Inject
 class MainActivity : AppCompatActivity() {
 
     @Inject lateinit var settingsManager: SettingsManager
+    @Inject lateinit var logManager: LogManager
     @Inject lateinit var permissionManager: PermissionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize CrashReporter for persistent debug logs
+        CrashReporter(applicationContext, logManager, settingsManager).init()
+
         enableEdgeToEdge()
         settingsManager.applySettings()
 
@@ -113,9 +97,11 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         MainScreen(
                             settings = settingsManager,
+                            logManager = logManager,
                             onStart = { startSpeedService() },
                             onStop = { stopSpeedService() },
-                            currentDarkMode = darkModeState
+                            currentDarkMode = darkModeState,
+                            activity = this
                         )
                     }
                 }
@@ -125,7 +111,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun startSpeedService() {
         val intent = Intent(this, SpeedService::class.java)
-        startForegroundService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun stopSpeedService() {
@@ -140,9 +130,11 @@ class MainActivity : AppCompatActivity() {
 @Composable
 fun MainScreen(
     settings: SettingsManager,
+    logManager: LogManager,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    currentDarkMode: Int
+    currentDarkMode: Int,
+    activity: MainActivity
 ) {
     val tolerance by settings.toleranceFlow.collectAsStateWithLifecycle(initialValue = 5)
     val overlaySize by settings.overlaySizeFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
@@ -152,6 +144,7 @@ fun MainScreen(
     val showCameras by settings.showSpeedCamerasFlow.collectAsStateWithLifecycle(initialValue = false)
     val autostartBoot by settings.autostartBootFlow.collectAsStateWithLifecycle(initialValue = false)
     val language by settings.languageFlow.collectAsStateWithLifecycle(initialValue = "en")
+    val isDebugMode by settings.debugModeFlow.collectAsStateWithLifecycle(initialValue = false)
 
     Scaffold(
         topBar = {
@@ -252,6 +245,46 @@ fun MainScreen(
                     settings.overlayAlpha = (1f - it).coerceIn(0f, 1f)
                 }
             }
+
+            // Debug Group
+            SettingsCard(title = stringResource(R.string.debug_group)) {
+                SettingSwitch(stringResource(R.string.debug_mode), isDebugMode) {
+                    settings.isDebugModeEnabled = it
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val logs = logManager.getDebugLogs()
+                            val downloadsDir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                            val exportFile = File(downloadsDir, "speedoverlay_debug_logs.txt")
+                            try {
+                                exportFile.writeText(logs)
+                                Toast.makeText(activity, activity.getString(R.string.logs_exported, exportFile.absolutePath), Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(activity, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.export_logs))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            logManager.clearDebugLogs()
+                            Toast.makeText(activity, R.string.logs_cleared, Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.clear_logs))
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
