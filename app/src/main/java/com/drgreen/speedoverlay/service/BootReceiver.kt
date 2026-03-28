@@ -31,11 +31,7 @@ class BootReceiver : BroadcastReceiver() {
             if (isEnabled) {
                 Log.d("BootReceiver", "Autostart is enabled. Starting SpeedService...")
                 val serviceIntent = Intent(context, SpeedService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(serviceIntent)
-                } else {
-                    context.startService(serviceIntent)
-                }
+                context.startForegroundService(serviceIntent)
             } else {
                 Log.d("BootReceiver", "Autostart is disabled. Skipping service start.")
             }

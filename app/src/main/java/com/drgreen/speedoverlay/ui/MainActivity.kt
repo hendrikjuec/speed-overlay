@@ -111,11 +111,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startSpeedService() {
         val intent = Intent(this, SpeedService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
+        startForegroundService(intent)
     }
 
     private fun stopSpeedService() {
@@ -141,7 +137,6 @@ fun MainScreen(
     val overlayAlpha by settings.overlayAlphaFlow.collectAsStateWithLifecycle(initialValue = 1.0f)
     val useMph by settings.useMphFlow.collectAsStateWithLifecycle(initialValue = false)
     val audioWarning by settings.audioWarningFlow.collectAsStateWithLifecycle(initialValue = true)
-    val showCameras by settings.showSpeedCamerasFlow.collectAsStateWithLifecycle(initialValue = false)
     val autostartBoot by settings.autostartBootFlow.collectAsStateWithLifecycle(initialValue = false)
     val language by settings.languageFlow.collectAsStateWithLifecycle(initialValue = "en")
     val isDebugMode by settings.debugModeFlow.collectAsStateWithLifecycle(initialValue = false)
@@ -204,7 +199,6 @@ fun MainScreen(
             SettingsCard(title = stringResource(R.string.settings_title)) {
                 SettingSwitch(stringResource(R.string.use_mph), useMph) { settings.useMph = it }
                 SettingSwitch(stringResource(R.string.audio_warning), audioWarning) { settings.isAudioWarningEnabled = it }
-                SettingSwitch(stringResource(R.string.show_speed_cameras), showCameras) { settings.showSpeedCameras = it }
                 SettingLanguage(currentLanguage = language) { settings.language = it }
                 SettingDarkMode(currentMode = currentDarkMode) { settings.darkMode = it }
             }
@@ -265,7 +259,7 @@ fun MainScreen(
                                 exportFile.writeText(logs)
                                 Toast.makeText(activity, activity.getString(R.string.logs_exported, exportFile.absolutePath), Toast.LENGTH_LONG).show()
                             } catch (e: Exception) {
-                                Toast.makeText(activity, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(activity, activity.getString(R.string.export_failed, e.message ?: "Unknown error"), Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.weight(1f)

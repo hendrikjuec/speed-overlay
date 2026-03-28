@@ -59,7 +59,7 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
         }
 
         var sum = 0f
-        for (i in 0..historySize) {
+        for (i in 0 until historySize) {
             sum += speedHistory[i]
         }
         val avgSpeedMs = sum / historySize
@@ -72,11 +72,8 @@ class SpeedProcessor(private val smoothingWindow: Int = Config.SMOOTHING_WINDOW)
     }
 
     fun isSpeeding(currentSpeed: Int, limit: Int?, tolerance: Int): Boolean {
-        val effectiveLimit = when (limit) {
-            null -> return false
-            OsmParser.URBAN_ICON_CODE -> 50
-            else -> limit
-        }
+        // Strictness: No fallback to urban icon code (already removed from parser)
+        val effectiveLimit = limit ?: return false
         if (effectiveLimit <= 0) return false
         return currentSpeed > (effectiveLimit + tolerance)
     }

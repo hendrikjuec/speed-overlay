@@ -14,6 +14,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 
 /**
  * Zentrales Management für Berechtigungen.
@@ -54,7 +55,7 @@ open class PermissionManager(private val context: Context) {
         try {
             val intent = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${activity.packageName}")
+                "package:${activity.packageName}".toUri()
             )
             activity.startActivity(intent)
         } catch (e: Exception) {

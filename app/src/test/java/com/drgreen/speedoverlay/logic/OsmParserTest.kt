@@ -33,63 +33,59 @@ class OsmParserTest {
     }
 
     @Test
-    fun `test implicit motorway by country`() {
-        // Deutschland: Unbegrenzt (0)
-        val resDe = parser.parseSpeedLimit(mapOf("highway" to "motorway"), "DE")
-        assertEquals(0, resDe.limit)
-        assertTrue(resDe.isConfidenceHigh)
+    fun `test signals or walk`() {
+        val resSignals = parser.parseSpeedLimit(mapOf("maxspeed" to "signals"))
+        assertEquals(-1, resSignals.limit)
+        assertTrue(resSignals.isConfidenceHigh)
 
-        // Frankreich: 130
-        val resFr = parser.parseSpeedLimit(mapOf("highway" to "motorway"), "FR")
-        assertEquals(130, resFr.limit)
-        assertTrue(resFr.isConfidenceHigh)
+        val resWalk = parser.parseSpeedLimit(mapOf("maxspeed" to "walk"))
+        assertEquals(7, resWalk.limit)
+        assertTrue(resWalk.isConfidenceHigh)
     }
 
     @Test
-    fun `test implicit rural roads (No Info Policy)`() {
-        // Gemäß neuer Policy: Ohne Schild auf Landstraßen -> null
-        val resDef = parser.parseSpeedLimit(mapOf("highway" to "primary"), "DE")
-        assertNull(resDef.limit)
-        assertFalse(resDef.isConfidenceHigh)
+    fun `test country specific urban rural tags`() {
+        val resUrban = parser.parseSpeedLimit(mapOf("maxspeed" to "DE:urban"))
+        assertEquals(50, resUrban.limit)
+        assertTrue(resUrban.isConfidenceHigh)
+
+        val resRural = parser.parseSpeedLimit(mapOf("maxspeed" to "DE:rural"))
+        assertEquals(100, resRural.limit)
+        assertTrue(resRural.isConfidenceHigh)
+
+        val resMotorway = parser.parseSpeedLimit(mapOf("maxspeed" to "DE:motorway"))
+        assertEquals(0, resMotorway.limit)
+        assertTrue(resMotorway.isConfidenceHigh)
     }
 
     @Test
-    fun `test implicit residential urban (Icon Code)`() {
-        val tags = mapOf("highway" to "residential")
-        val result = parser.parseSpeedLimit(tags)
-        // Gemäß neuer Policy: Innerorts -> URBAN_ICON_CODE
-        assertEquals(OsmParser.URBAN_ICON_CODE, result.limit)
-        assertFalse(result.isConfidenceHigh)
+    fun `test ambiguous data - show nothing`() {
+        // Multiple speeds in one tag -> Ambiguous -> null
+        val resAmbiguous = parser.parseSpeedLimit(mapOf("maxspeed" to "30; 50"))
+        assertNull(resAmbiguous.limit)
+        assertFalse(resAmbiguous.isConfidenceHigh)
+
+        val resMixed = parser.parseSpeedLimit(mapOf("maxspeed" to "30 mph; 50 km/h"))
+        assertNull(resMixed.limit)
+        assertFalse(resMixed.isConfidenceHigh)
     }
 
     @Test
-    fun `test zone maxspeed priority`() {
-        // Schild/Zone hat Vorrang vor Highway-Typ
-        val tags = mapOf("highway" to "residential", "zone:maxspeed" to "DE:30")
-        val result = parser.parseSpeedLimit(tags)
-        assertEquals(30, result.limit)
-        assertTrue(result.isConfidenceHigh)
+    fun `test missing maxspeed - show nothing`() {
+        // Even if we know it's a motorway, we show nothing without the maxspeed tag
+        val resHighway = parser.parseSpeedLimit(mapOf("highway" to "motorway"))
+        assertNull(resHighway.limit)
+        assertFalse(resHighway.isConfidenceHigh)
+
+        val resZone = parser.parseSpeedLimit(mapOf("zone:maxspeed" to "30"))
+        assertNull(resZone.limit)
+        assertFalse(resZone.isConfidenceHigh)
     }
 
     @Test
-    fun `test source maxspeed parsing`() {
-        val tagsNumeric = mapOf("source:maxspeed" to "DE:50")
-        assertEquals(50, parser.parseSpeedLimit(tagsNumeric).limit)
-    }
-
-    @Test
-    fun `test additional info parsing`() {
-        val tags = mapOf(
-            "hazard" to "yes",
-            "highway" to "speed_camera",
-            "amenity" to "school"
-        )
-        val info = parser.parseAdditionalInfo(tags, showSpeedCamerasEnabled = true)
-        assertTrue(info.contains(OsmParser.INFO_HAZARD))
-        assertTrue(info.contains(OsmParser.INFO_CAMERA))
-        assertTrue(info.contains(OsmParser.INFO_SCHOOL))
-
-        val infoNoCam = parser.parseAdditionalInfo(tags, showSpeedCamerasEnabled = false)
-        assertFalse(infoNoCam.contains(OsmParser.INFO_CAMERA))
+    fun `test numeric filtering`() {
+        val resUnit = parser.parseSpeedLimit(mapOf("maxspeed" to "50 km/h"))
+        assertEquals(50, resUnit.limit)
+        assertTrue(resUnit.isConfidenceHigh)
     }
 }

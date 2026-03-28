@@ -12,7 +12,6 @@ import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
 import com.drgreen.speedoverlay.R
-import com.drgreen.speedoverlay.logic.OsmParser
 
 /**
  * AppWidgetProvider for displaying speed and speed limits on the home screen.
@@ -38,7 +37,7 @@ class SpeedWidgetProvider : AppWidgetProvider() {
             val intent = Intent(context, SpeedWidgetProvider::class.java).apply {
                 action = ACTION_UPDATE_WIDGET
                 putExtra(EXTRA_SPEED, speed)
-                putExtra(EXTRA_LIMIT, limit ?: -1)
+                putExtra(EXTRA_LIMIT, limit ?: -2) // -2 represents null/unknown
                 putExtra(EXTRA_UNIT, unit)
                 putExtra(EXTRA_IS_SPEEDING, isSpeeding)
                 putExtra(EXTRA_CONFIDENCE, isConfidenceHigh)
@@ -51,7 +50,7 @@ class SpeedWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
         if (intent.action == ACTION_UPDATE_WIDGET) {
             val speed = intent.getIntExtra(EXTRA_SPEED, 0)
-            val limit = intent.getIntExtra(EXTRA_LIMIT, -1).let { if (it == -1) null else it }
+            val limit = intent.getIntExtra(EXTRA_LIMIT, -2).let { if (it == -2) null else it }
             val unit = intent.getStringExtra(EXTRA_UNIT) ?: "km/h"
             val isSpeeding = intent.getBooleanExtra(EXTRA_IS_SPEEDING, false)
             val isConfidenceHigh = intent.getBooleanExtra(EXTRA_CONFIDENCE, false)
@@ -61,31 +60,17 @@ class SpeedWidgetProvider : AppWidgetProvider() {
             val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
 
             if (appWidgetIds.isNotEmpty()) {
-                val views = createRemoteViews(context, speed, limit, unit, isSpeeding, isConfidenceHigh)
+                val views = RemoteViews(context.packageName, R.layout.speed_widget)
+                views.setTextViewText(R.id.widget_current_speed, speed.toString())
+                views.setTextViewText(R.id.widget_unit, unit)
+
+                val speedColor = if (isSpeeding) 0xFFFF1744.toInt() else 0xFFFFFFFF.toInt()
+                views.setTextColor(R.id.widget_current_speed, speedColor)
+
+                updateLimitDisplay(views, limit, isConfidenceHigh)
                 appWidgetManager.updateAppWidget(appWidgetIds, views)
             }
         }
-    }
-
-    private fun createRemoteViews(
-        context: Context,
-        speed: Int,
-        limit: Int?,
-        unit: String,
-        isSpeeding: Boolean,
-        isConfidenceHigh: Boolean
-    ): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.speed_widget)
-
-        views.setTextViewText(R.id.widget_current_speed, speed.toString())
-        views.setTextViewText(R.id.widget_unit, unit)
-
-        val speedColor = if (isSpeeding) 0xFFFF1744.toInt() else 0xFFFFFFFF.toInt()
-        views.setTextColor(R.id.widget_current_speed, speedColor)
-
-        updateLimitDisplay(views, limit, isConfidenceHigh)
-
-        return views
     }
 
     private fun updateLimitDisplay(views: RemoteViews, limit: Int?, isConfidenceHigh: Boolean) {
@@ -96,18 +81,19 @@ class SpeedWidgetProvider : AppWidgetProvider() {
 
         views.setViewVisibility(R.id.widget_limit_container, View.VISIBLE)
 
+        // Strictness: Only show red border for actual speed limits (> 0)
         val backgroundRes = when {
-            limit <= 0 -> R.drawable.speed_limit_circle_empty
-            isConfidenceHigh -> R.drawable.speed_limit_circle_red
-            else -> R.drawable.speed_limit_circle_gray
+            limit > 0 && isConfidenceHigh -> R.drawable.speed_limit_circle_red
+            limit > 0 -> R.drawable.speed_limit_circle_gray
+            else -> R.drawable.speed_limit_circle_empty
         }
         views.setImageViewResource(R.id.widget_limit_bg, backgroundRes)
 
-        when (limit) {
-            0 -> views.showIcon(R.drawable.ic_unlimited)
-            -1 -> views.showIcon(R.drawable.ic_variable)
-            OsmParser.URBAN_ICON_CODE -> views.showIcon(R.drawable.ic_urban)
-            else -> views.showText(limit.toString())
+        when {
+            limit == 0 -> views.showIcon(R.drawable.ic_unlimited)
+            limit == -1 -> views.showIcon(R.drawable.ic_variable)
+            limit > 0 -> views.showText(limit.toString())
+            else -> views.setViewVisibility(R.id.widget_limit_container, View.GONE)
         }
     }
 

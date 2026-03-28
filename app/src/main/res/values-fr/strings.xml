@@ -13,7 +13,6 @@
     <string name="use_mph">Utiliser MPH</string>
     <string name="use_mph_desc">Passer des km/h aux mph</string>
     <string name="tolerance_title">Tolérance de vitesse</string>
-    <string name="show_speed_cameras">Afficher les radars</string>
 
     <string name="appearance_group">Apparence</string>
     <string name="overlay_size">Taille de la superposition</string>
@@ -60,8 +59,5 @@
     <!-- Overlay States -->
     <string name="overlay_unlimited">Illimité</string>
     <string name="overlay_variable">Variable</string>
-    <string name="overlay_urban">Zone urbaine</string>
-    <string name="overlay_hazard">Danger</string>
-    <string name="overlay_camera">Radar</string>
     <string name="overlay_muted">Muet</string>
 </resources>

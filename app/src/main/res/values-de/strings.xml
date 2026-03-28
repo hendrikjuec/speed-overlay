@@ -23,7 +23,6 @@
     <string name="use_mph">Meilen (MPH) nutzen</string>
     <string name="use_mph_desc">Einheiten von km/h auf mph umstellen.</string>
     <string name="tolerance_title">Geschwindigkeits-Toleranz</string>
-    <string name="show_speed_cameras">Blitzer anzeigen</string>
 
     <string name="appearance_group">Darstellung</string>
     <string name="overlay_size">Größe des Overlays</string>
@@ -75,8 +74,5 @@
     <!-- Overlay States -->
     <string name="overlay_unlimited">Unbegrenzt</string>
     <string name="overlay_variable">Variabel</string>
-    <string name="overlay_urban">Innerorts</string>
-    <string name="overlay_hazard">Gefahr</string>
-    <string name="overlay_camera">Blitzer</string>
     <string name="overlay_muted">Stummgeschaltet</string>
 </resources>

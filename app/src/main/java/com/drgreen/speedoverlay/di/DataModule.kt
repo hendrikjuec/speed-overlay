@@ -66,10 +66,9 @@ object DataModule {
     @Singleton
     fun provideSpeedRepository(
         overpassApi: OverpassApi,
-        osmParser: OsmParser,
-        speedDatabase: SpeedDatabase
+        osmParser: OsmParser
     ): SpeedRepository {
-        return SpeedRepository(overpassApi, osmParser, speedDatabase)
+        return SpeedRepository(overpassApi, osmParser)
     }
 
     @Provides

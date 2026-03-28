@@ -37,7 +37,6 @@
     <string name="overlay_alpha">Overlay Transparency</string>
     <string name="dark_mode">Dark Mode</string>
     <string name="language">Language</string>
-    <string name="show_speed_cameras">Show Speed Cameras</string>
 
     <!-- Values & Options -->
     <string name="dark_mode_auto">System</string>
@@ -83,9 +82,6 @@
     <!-- Overlay States -->
     <string name="overlay_unlimited">Unlimited</string>
     <string name="overlay_variable">Variable</string>
-    <string name="overlay_urban">Urban Area</string>
-    <string name="overlay_hazard">Hazard</string>
-    <string name="overlay_camera">Speed Camera</string>
     <string name="overlay_muted">Muted</string>
 
     <!-- Units & Default Values -->
@@ -101,4 +97,5 @@
     <string name="clear_logs">Logs löschen</string>
     <string name="logs_exported">Logs exportiert nach: %s</string>
     <string name="logs_cleared">Debug-Logs gelöscht</string>
+    <string name="export_failed">Export fehlgeschlagen: %s</string>
 </resources>

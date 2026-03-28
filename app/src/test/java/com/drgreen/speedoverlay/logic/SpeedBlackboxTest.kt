@@ -5,8 +5,6 @@
 package com.drgreen.speedoverlay.logic
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -18,14 +16,12 @@ class SpeedBlackboxTest {
     private val processor = SpeedProcessor(smoothingWindow = 5)
 
     @Test
-    fun `Testfall Tempolimit Erkennung - Verschiedene Länder und Formate`() {
+    fun `Testfall Tempolimit Erkennung - Verschiedene Laender und Formate`() {
         val testCases = listOf(
             mapOf("maxspeed" to "50") to 50,
             mapOf("maxspeed" to "120 km/h") to 120,
             mapOf("maxspeed" to "none") to 0,
             mapOf("maxspeed" to "unlimited") to 0,
-            mapOf("highway" to "residential") to OsmParser.URBAN_ICON_CODE,
-            mapOf("highway" to "motorway") to 0,
             mapOf("maxspeed" to "") to null,
             null to null
         )
@@ -46,9 +42,8 @@ class SpeedBlackboxTest {
             Triple(55, limit, tolerance) to false,
             Triple(56, limit, tolerance) to true,
             Triple(40, limit, tolerance) to false,
-            Triple(100, null, tolerance) to false,
-            Triple(200, 0, tolerance) to false, // Unbegrenzt -> Keine Warnung
-            Triple(200, OsmParser.URBAN_ICON_CODE, tolerance) to true // Innerorts (50) -> Warnung
+            Triple(100, null as Int?, tolerance) to false,
+            Triple(200, 0, tolerance) to false // Unbegrenzt -> Keine Warnung
         )
 
         scenarios.forEach { (params, shouldWarn) ->

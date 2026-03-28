@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.drgreen.speedoverlay.R
-import com.drgreen.speedoverlay.logic.OsmParser
 import java.util.Locale
 
 /**
@@ -155,26 +152,20 @@ fun OverlayScreen(
                         )
                     }
 
-                    when (limit) {
-                        0 -> Icon(
+                    when {
+                        limit == 0 -> Icon(
                             painter = painterResource(id = R.drawable.ic_unlimited),
                             contentDescription = stringResource(R.string.overlay_unlimited),
                             tint = Color.Unspecified,
                             modifier = Modifier.fillMaxSize()
                         )
-                        -1 -> Icon(
+                        limit == -1 -> Icon(
                             painter = painterResource(id = R.drawable.ic_variable),
                             contentDescription = stringResource(R.string.overlay_variable),
                             tint = Color.Unspecified,
                             modifier = Modifier.fillMaxSize()
                         )
-                        OsmParser.URBAN_ICON_CODE -> Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = stringResource(R.string.overlay_urban),
-                            tint = Color.Gray,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        else -> Text(
+                        limit > 0 -> Text(
                             text = limit.toString(),
                             color = Color.Black,
                             fontSize = 20.sp,
@@ -184,37 +175,14 @@ fun OverlayScreen(
                 }
             }
 
-            // --- Warning Icons ---
-            if (state.showHazard || state.showCamera || state.isAudioMuted) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (state.showHazard) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_warning),
-                            contentDescription = stringResource(R.string.overlay_hazard),
-                            tint = Color(0xFFFFD600),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (state.showCamera) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_camera),
-                            contentDescription = stringResource(R.string.overlay_camera),
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (state.isAudioMuted) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_notifications_off),
-                            contentDescription = stringResource(R.string.overlay_muted),
-                            tint = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+            // --- Status Icons ---
+            if (state.isAudioMuted) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_notifications_off),
+                    contentDescription = stringResource(R.string.overlay_muted),
+                    tint = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }

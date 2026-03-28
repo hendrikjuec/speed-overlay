@@ -8,158 +8,182 @@ import android.location.Location
 import com.drgreen.speedoverlay.logic.OsmParser
 import com.drgreen.speedoverlay.util.Config
 import com.drgreen.speedoverlay.util.GeoUtils
-import com.google.gson.Gson
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.floor
 
 /**
- * Repository for fetching speed limits from Overpass API (OSM) and managing local cache.
+ * High-performance repository for fetching and caching speed limits from OSM.
+ * Uses area-based caching (BBox) and directional prefetching (inspired by Blitzer.de/OsmAnd).
+ * Optimized for < 1s latency with precise line-segment matching and sticky limits.
  */
 @Singleton
 class SpeedRepository @Inject constructor(
     private val overpassApi: OverpassApi,
-    private val osmParser: OsmParser,
-    private val speedDatabase: SpeedDatabase
+    private val osmParser: OsmParser
 ) {
-    private val gson = Gson()
-    private var cachedLimit: Int? = null
-    private var cachedInfo: List<String> = emptyList()
-    private var cachedConfidence: Boolean = false
-    private var cachedLocation: Location? = null
-    private var cachedTimestamp: Long = 0L
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    companion object {
-        private const val MS_TO_KMH = 3.6f
-        private const val TILE_PRECISION = 100.0
-    }
+    // In-memory Box Cache
+    private var cachedElements: List<Element> = emptyList()
+    private var currentBox: GeoUtils.BBox? = null
+    private var safeZone: GeoUtils.BBox? = null
+    private var lastFetchTime = 0L
+
+    // Sticky limit logic to prevent flickering
+    private var lastValidLimit: Int? = null
+    private var lastValidConfidence: Boolean = false
+    private var lastValidTime = 0L
+    private val STICKY_DURATION_MS = 2500L // Keep limit for 2.5s if lost
+
+    private val fetchMutex = Mutex()
 
     /**
-     * Fetches the speed limit for a given location, heading, and speed.
-     * Uses a two-level caching strategy (RAM and Room database).
+     * Fetches the speed limit for a given location.
+     * Uses local matching if the location is within the cached box.
      */
     suspend fun fetchSpeedLimit(
         lat: Double,
         lon: Double,
         heading: Float? = null,
         speedKmh: Float = 0f,
-        showCameras: Boolean = false
+        @Suppress("UNUSED_PARAMETER") showCameras: Boolean = false
     ): SpeedResult<Int?> = withContext(Dispatchers.IO) {
-        val currentTime = System.currentTimeMillis()
+
         val currentLocation = Location("").apply {
             latitude = lat
             longitude = lon
         }
 
-        // --- 1. Short-term RAM Cache (for performance) ---
-        if (cachedLimit != null &&
-            currentTime - cachedTimestamp < Config.CACHE_EXPIRATION_MS &&
-            (cachedLocation?.distanceTo(currentLocation) ?: Float.MAX_VALUE) < Config.CACHE_DISTANCE_THRESHOLD_METERS) {
-            return@withContext SpeedResult.Success(cachedLimit, cachedInfo, cachedConfidence)
+        // 1. Area management (Fetch box if needed)
+        val needsFetch = currentBox == null || !currentBox!!.contains(lat, lon) ||
+                         System.currentTimeMillis() - lastFetchTime > Config.CACHE_EXPIRATION_MS
+
+        val isNearEdge = safeZone != null && !safeZone!!.contains(lat, lon)
+
+        if (needsFetch) {
+            fetchArea(lat, lon, heading, speedKmh)
+        } else if (isNearEdge && !fetchMutex.isLocked) {
+            serviceScopeLaunch { fetchArea(lat, lon, heading, speedKmh) }
         }
 
-        // --- 2. Calculate Tile ID (approx. 1km x 1km) ---
-        val tileId = "${floor(lat * TILE_PRECISION).toInt()}_${floor(lon * TILE_PRECISION).toInt()}"
+        // 2. Precise matching with segment distance
+        val result = processLocalMatch(cachedElements, heading, speedKmh, currentLocation)
 
-        // --- 3. Attempt to fetch data (Online -> Update Cache) ---
+        // 3. Apply Sticky Limit logic
+        if (result is SpeedResult.Success) {
+            if (result.data != null) {
+                lastValidLimit = result.data
+                lastValidConfidence = result.isConfidenceHigh
+                lastValidTime = System.currentTimeMillis()
+                return@withContext result
+            } else if (System.currentTimeMillis() - lastValidTime < STICKY_DURATION_MS) {
+                // Return sticky limit to prevent flickering
+                return@withContext SpeedResult.Success(lastValidLimit, emptyList(), lastValidConfidence)
+            }
+        }
+
+        result
+    }
+
+    private suspend fun fetchArea(lat: Double, lon: Double, heading: Float?, speedKmh: Float) = fetchMutex.withLock {
+        if (currentBox?.contains(lat, lon) == true &&
+            System.currentTimeMillis() - lastFetchTime < 60000L) return@withLock
+
         try {
-            val speedMs = speedKmh / MS_TO_KMH
-            val dynamicRadius = (Config.BASE_SEARCH_RADIUS_METERS + (speedMs * Config.LOOKAHEAD_TIME_SECONDS))
-                .coerceAtMost(Config.MAX_SEARCH_RADIUS_METERS.toFloat())
+            val box = GeoUtils.getDirectionalBoundingBox(lat, lon, heading, speedKmh, Config.CACHE_BOX_SIZE_KM)
+            val zone = GeoUtils.getDirectionalBoundingBox(lat, lon, heading, speedKmh, Config.CACHE_SAFE_ZONE_KM)
 
-            // Overpass Query
-            val query = "[out:json];way(around:$dynamicRadius, $lat, $lon)[highway];out tags geom;"
+            val query = "[out:json];way($box)[maxspeed];out tags geom;"
             val response = overpassApi.getSpeedLimit(query)
 
-            // Update permanent cache (Room)
-            val tileJson = gson.toJson(response)
-            speedDatabase.tileDao().insertTile(OsmTile(tileId, tileJson, currentTime))
-
-            processBestMatch(response.elements, heading, speedKmh, showCameras, currentLocation)
+            cachedElements = response.elements
+            currentBox = box
+            safeZone = zone
+            lastFetchTime = System.currentTimeMillis()
         } catch (e: Exception) {
-            // --- Offline Fallback (Permanent Cache) ---
-            val cachedTile = speedDatabase.tileDao().getTile(tileId)
-            if (cachedTile != null) {
-                val response = gson.fromJson(cachedTile.data, OverpassResponse::class.java)
-                processBestMatch(response.elements, heading, speedKmh, showCameras, currentLocation)
-            } else {
-                SpeedResult.Error("Offline and no cache available for this area.")
-            }
+            // Keep existing cache on error
         }
     }
 
-    /**
-     * Processes multiple road elements to find the most likely match for the current position and heading.
-     */
-    private fun processBestMatch(
+    private fun processLocalMatch(
         elements: List<Element>,
-        heading: Float?,
+        carHeading: Float?,
         speedKmh: Float,
-        showCameras: Boolean,
         currentLocation: Location
     ): SpeedResult<Int?> {
         if (elements.isEmpty()) return SpeedResult.Success(null, emptyList(), false)
 
-        val bestElement = elements.maxByOrNull { element ->
-            calculateScore(element, heading, speedKmh, currentLocation)
-        } ?: elements.first()
+        // FILTER: Find closest road using precise line-segment distance
+        val matchingElements = elements.map { element ->
+            val minDistance = calculateMinDistance(currentLocation.latitude, currentLocation.longitude, element)
+            element to minDistance
+        }.filter { it.second < 45f } // Search radius of 45m from center of road
 
-        val parseResult = osmParser.parseSpeedLimit(bestElement.tags)
-        val additionalInfo = osmParser.parseAdditionalInfo(bestElement.tags, showCameras)
+        if (matchingElements.isEmpty()) return SpeedResult.Success(null, emptyList(), false)
 
-        val result = SpeedResult.Success(
+        // SCORE: Weight by distance and heading
+        val bestMatch = matchingElements.maxByOrNull { (element, minDistance) ->
+            calculateScore(element, minDistance, carHeading, speedKmh, currentLocation)
+        } ?: return SpeedResult.Success(null, emptyList(), false)
+
+        val parseResult = osmParser.parseSpeedLimit(bestMatch.first.tags)
+
+        return SpeedResult.Success(
             data = parseResult.limit,
-            additionalInfo = additionalInfo,
+            additionalInfo = emptyList(),
             isConfidenceHigh = parseResult.isConfidenceHigh
         )
-
-        // Update RAM cache
-        updateRamCache(result, currentLocation)
-
-        return result
     }
 
-    /**
-     * Updates the internal RAM cache with the latest result.
-     */
-    private fun updateRamCache(result: SpeedResult.Success<Int?>, currentLocation: Location) {
-        cachedLimit = result.data
-        cachedInfo = result.additionalInfo
-        cachedConfidence = result.isConfidenceHigh
-        cachedLocation = currentLocation
-        cachedTimestamp = System.currentTimeMillis()
-    }
+    private fun calculateMinDistance(lat: Double, lon: Double, element: Element): Float {
+        val geom = element.geometry ?: return 1000f
+        if (geom.size < 2) return GeoUtils.distanceToPoint(lat, lon, geom[0])
 
-    /**
-     * Calculates a matching score for a road element based on distance, heading, and road type.
-     */
-    private fun calculateScore(element: Element, carHeading: Float?, speedKmh: Float, carLoc: Location): Double {
-        var score = 0.0
-        val geom = element.geometry
-
-        // Distance score
-        val minDistance = geom?.minOfOrNull { GeoUtils.distanceToPoint(carLoc.latitude, carLoc.longitude, it) } ?: 1000f
-        val distanceRatio = (minDistance / Config.MAX_SEARCH_RADIUS_METERS.toFloat()).toDouble().coerceIn(0.0, 1.0)
-        score += (1.0 - distanceRatio) * 2.0
-
-        // Heading score
-        if (carHeading != null && geom != null && geom.size >= 2) {
-            val wayHeading = GeoUtils.calculateBearing(geom[0], geom.last())
-            val diff = GeoUtils.getHeadingDifference(carHeading, wayHeading).toDouble()
-            val tolerance = if (speedKmh < Config.JUNCTION_SPEED_THRESHOLD_KMH)
-                Config.JUNCTION_HEADING_TOLERANCE_DEG else Config.HEADING_TOLERANCE_DEG
-            if (diff <= tolerance) score += 3.0
+        var minDistance = Float.MAX_VALUE
+        for (i in 0 until geom.size - 1) {
+            val dist = GeoUtils.distanceToSegment(lat, lon, geom[i], geom[i + 1])
+            if (dist < minDistance) minDistance = dist
         }
+        return minDistance
+    }
 
-        // Road type score
-        val type = element.tags?.get("highway") ?: ""
-        score += when {
-            speedKmh > Config.HIGH_SPEED_THRESHOLD_KMH -> if (type.contains("motorway") || type.contains("trunk")) 2.0 else 0.1
-            speedKmh < Config.LOW_SPEED_THRESHOLD_KMH -> if (type == "residential" || type == "living_street") 1.5 else 0.5
-            else -> 0.5
+    internal fun calculateScore(
+        element: Element,
+        minDistance: Float,
+        carHeading: Float?,
+        speedKmh: Float,
+        carLoc: Location
+    ): Double {
+        var score = 0.0
+        val geom = element.geometry ?: return -10.0
+
+        // 1. Distance (Precise segment distance)
+        val distanceRatio = (minDistance / 45.0).coerceIn(0.0, 1.0)
+        score += (1.0 - distanceRatio) * 7.0
+
+        // 2. Heading (Crucial for bridges/parallel roads)
+        if (carHeading != null && geom.size >= 2) {
+            val wayHeading = GeoUtils.calculateBearing(geom[0], geom.last())
+            val diff = GeoUtils.getHeadingDifference(carHeading, wayHeading)
+            val tolerance = if (speedKmh < Config.JUNCTION_SPEED_THRESHOLD_KMH) 75.0 else 35.0
+
+            if (diff <= tolerance) {
+                score += (1.0 - (diff / tolerance)) * 4.0
+            } else {
+                score -= 8.0 // High penalty for wrong direction
+            }
         }
         return score
+    }
+
+    private fun serviceScopeLaunch(block: suspend () -> Unit) {
+        repositoryScope.launch { block() }
     }
 }

@@ -52,7 +52,6 @@ class SettingsManager(private val context: Context) {
         val OVERLAY_ALPHA = floatPreferencesKey("overlay_alpha")
         val OVERLAY_TEXT_COLOR = intPreferencesKey("overlay_text_color")
         val DISCLAIMER_ACCEPTED = booleanPreferencesKey("disclaimer_accepted")
-        val SHOW_SPEED_CAMERAS = booleanPreferencesKey("show_speed_cameras")
         val BATTERY_OPTIMIZATION = booleanPreferencesKey("battery_optimization")
         val OVERLAY_X = intPreferencesKey("overlay_x")
         val OVERLAY_Y = intPreferencesKey("overlay_y")
@@ -69,7 +68,6 @@ class SettingsManager(private val context: Context) {
     val toleranceFlow = prefsState.map { it[TOLERANCE] ?: DEFAULT_TOLERANCE }.distinctUntilChanged()
     val useMphFlow = prefsState.map { it[UNIT_MPH] ?: false }.distinctUntilChanged()
     val audioWarningFlow = prefsState.map { it[AUDIO_WARNING] ?: true }.distinctUntilChanged()
-    val showSpeedCamerasFlow = prefsState.map { it[SHOW_SPEED_CAMERAS] ?: false }.distinctUntilChanged()
     val overlaySizeFlow = prefsState.map { it[OVERLAY_SIZE] ?: 1.0f }.distinctUntilChanged()
     val overlayAlphaFlow = prefsState.map { it[OVERLAY_ALPHA] ?: 1.0f }.distinctUntilChanged()
     val overlayTextColorFlow = prefsState.map { it[OVERLAY_TEXT_COLOR] ?: Color.WHITE }.distinctUntilChanged()
@@ -112,10 +110,6 @@ class SettingsManager(private val context: Context) {
     var isDisclaimerAccepted: Boolean
         get() = prefsState.value[DISCLAIMER_ACCEPTED] ?: false
         set(value) = update(DISCLAIMER_ACCEPTED, value)
-
-    var showSpeedCameras: Boolean
-        get() = prefsState.value[SHOW_SPEED_CAMERAS] ?: false
-        set(value) = update(SHOW_SPEED_CAMERAS, value)
 
     var isBatteryOptimizationEnabled: Boolean
         get() = prefsState.value[BATTERY_OPTIMIZATION] ?: true
